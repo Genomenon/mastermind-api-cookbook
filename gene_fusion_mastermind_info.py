@@ -32,17 +32,6 @@ def encode(str):
         return urllib.parse.quote_plus(str)
 
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
-    """
-    Call in a loop to create terminal progress bar
-
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        bar_length  - Optional  : character length of bar (Int)
-    """
     str_format = "{0:." + str(decimals) + "f}"
     percents = str_format.format(100 * (iteration / float(total)))
     filled_length = int(round(bar_length * iteration / float(total)))
@@ -54,13 +43,42 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
         sys.stdout.write('\n')
     sys.stdout.flush()
 
-def search_mode():
-    mode = raw_input("Search by:\n\t1. Known gene pair (both genes known)\n\t2. Known gene partner (one gene known)\n\t3. Known disease\n(Type 1, 2, or 3 and hit Enter): ")
-    return int(mode)
+def get_mode(options):
+    mode = None
+    options = [str(options.index(o)+1) + ". " + o for o in options]
+    # Turn number of options into text, e.g.: "1, 2 or 3"
+    valid = ' or '.join( ', '.join([str(i) for i in range(1, len(options)+1)]).rsplit(', ', 1))
+    while mode is None:
+        entered = raw_input("\t" + '\n\t'.join(options) + "\n(Type " + valid + " and hit Enter): ")
+        try:
+            mode = int(entered)
+            if mode > len(options):
+                mode = None
+                raise Exception
+        except:
+            print("Please enter " + valid)
+    return mode
 
-def choose_suggestion(options):
-    suggestions = api_get("suggestions", options)
-    value = encode(suggestions[0]['canonical'])
+def search_mode():
+    print "Search by:"
+    return get_mode(["Known gene pair (both genes known)", "Known gene partner (one gene known)", "Known disease"])
+
+def output_mode():
+    print "Compile and output:"
+    return get_mode(["Variants, diseases, and PMIDs", "PMIDs only"])
+
+def choose_suggestion(suggestion_type, prompt):
+    value = None
+    while value is None:
+        options = {}
+        suggestion_input = raw_input(prompt)
+        options[suggestion_type] = suggestion_input
+        suggestions = api_get("suggestions", options)
+        if len(suggestions) == 0:
+            print(suggestion_type.title() + " could not be found for \"" + options[suggestion_type] + "\"")
+            print("Please make sure you've properly typed it or try searching by another nomenclature.")
+        else:
+            value = encode(suggestions[0]['canonical'])
 
     return value
 
@@ -89,10 +107,10 @@ def fusion_pmids(options):
 
 def gene_pair_search(gene_a=None, gene_b=None, gene_a_pmids=None, gene_b_pmids=None):
     if gene_a is None:
-        gene_a = choose_suggestion({'gene': raw_input("Enter gene A: ")})
+        gene_a = choose_suggestion("gene", "Enter gene A: ")
 
     if gene_b is None:
-        gene_b = choose_suggestion({'gene': raw_input("Enter gene B: ")})
+        gene_b = choose_suggestion("gene", "Enter gene B: ")
 
     if gene_a_pmids is None:
         gene_a_pmids = fusion_pmids({'gene': gene_a})
@@ -108,7 +126,7 @@ def gene_pair_search(gene_a=None, gene_b=None, gene_a_pmids=None, gene_b_pmids=N
 
 def gene_search(gene_a=None):
     if gene_a is None:
-        gene_a = choose_suggestion({'gene': raw_input("Enter gene: ")})
+        gene_a = choose_suggestion("gene", "Enter gene: ")
 
     data = api_get("genes", {'gene': gene_a})
     genes = [gene['symbol'] for gene in data['genes'] if str(gene['symbol']).upper() != str(gene_a).upper()]
@@ -125,7 +143,7 @@ def gene_search(gene_a=None):
 
 def disease_search(disease=None):
     if disease is None:
-        disease = choose_suggestion({'disease': raw_input("Enter disease: ")})
+        disease = choose_suggestion("disease", "Enter disease: ")
 
     data = api_get("genes", {'disease': disease})
     genes = [gene['symbol'] for gene in data['genes']]
@@ -186,17 +204,16 @@ def aggregate_article_info(pmids_by_gene_pair):
 def main():
     print("Welcome to the Gene Fusion Evidence program powered by Mastermind.")
     mode = search_mode()
+    output = output_mode()
     if mode == 1:
-        print("Gene Pair mode selected")
-        pmids_by_gene_pair = gene_pair_search()
+        info = gene_pair_search()
     elif mode == 2:
-        print("Gene Partner mode selected")
-        pmids_by_gene_pair = gene_search()
+        info = gene_search()
     else:
-        print("Disease mode selected")
-        pmids_by_gene_pair = disease_search()
+        info = disease_search()
 
-    info = aggregate_article_info(pmids_by_gene_pair)
+    if output == 1:
+        info = aggregate_article_info(info)
 
     print('-'*100)
     for gene_pair, data in info.items():
@@ -208,13 +225,14 @@ def main():
             print("PMIDs:")
             print("\t" + ', '.join(data['pmids']))
 
-            print("\tVariants with supporting PMIDs:")
-            for values in sorted(data['variants'].items(), key=lambda item: len(item[1]), reverse=True):
-                print("\t\t" + str(values[0]) + ": " + ', '.join(values[1]))
+            if output == 1:
+                print("\tVariants with supporting PMIDs:")
+                for values in sorted(data['variants'].items(), key=lambda item: len(item[1]), reverse=True):
+                    print("\t\t" + str(values[0]) + ": " + ', '.join(values[1]))
 
-            print("\tDiseases with supporting PMIDs:")
-            for values in sorted(data['diseases'].items(), key=lambda item: len(item[1]), reverse=True):
-                print("\t\t" + str(values[0]).title() + ": " + ', '.join(values[1]))
+                print("\tDiseases with supporting PMIDs:")
+                for values in sorted(data['diseases'].items(), key=lambda item: len(item[1]), reverse=True):
+                    print("\t\t" + str(values[0]).title() + ": " + ', '.join(values[1]))
 
 if __name__ == "__main__":
     main()
