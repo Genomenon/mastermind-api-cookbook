@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
-import json, requests, urllib, sys
+import json, requests, urllib, sys, re
 from collections import defaultdict
 
 URL = "https://mastermind.genomenon.com/api/v2/"
 # Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
 API_TOKEN = "INSERT API TOKEN HERE"
-MAX_ARTICLES = 1000
+DEFAULT_MAX_ARTICLES = 1000
+_sensitivity = DEFAULT_MAX_ARTICLES
 
 def api_get(endpoint, options):
     params = options.copy()
@@ -67,6 +68,22 @@ def output_mode():
     print "Compile and output:"
     return get_mode(["Variants, diseases, and PMIDs", "PMIDs only"])
 
+def choose_sensitivity():
+    global _sensitivity
+    print("Choose maximum number of articles to fetch for each gene. The more articles, the more complete the results, but the longer the program will take to run.")
+    sensitivity_entered = None
+    while sensitivity_entered is None:
+        sensitivity_entered = re.sub('[,\.]', '', raw_input("Enter sensitivity (between 1 and 10,000), or leave blank for default [" + str(DEFAULT_MAX_ARTICLES) + "], and press Enter: "))
+        if sensitivity_entered:
+            try:
+                _sensitivity = int(sensitivity_entered)
+                if _sensitivity > 10000 or _sensitivity < 1:
+                    raise Exception
+            except:
+                sensitivity_entered = None
+                _sensitivity = DEFAULT_MAX_ARTICLES
+                print "Please enter a valid value or leave blank."
+
 def choose_suggestion(suggestion_type, prompt):
     value = None
     while value is None:
@@ -88,9 +105,9 @@ def fusion_pmids(options):
 
     data = api_get("articles", params)
     pmids = [article['pmid'] for article in data['articles']]
-    # Only get 2000 most relevant PMIDs
-    articles = min(int(data['article_count']), MAX_ARTICLES)
-    pages = min(int(data['pages']), MAX_ARTICLES/5)
+
+    articles = min(int(data['article_count']), _sensitivity)
+    pages = min(int(data['pages']), _sensitivity/5)
 
     print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ':', suffix = 'Complete', bar_length = 50)
 
@@ -205,6 +222,7 @@ def main():
     print("Welcome to the Gene Fusion Evidence program powered by Mastermind.")
     mode = search_mode()
     output = output_mode()
+    choose_sensitivity()
     if mode == 1:
         info = gene_pair_search()
     elif mode == 2:
