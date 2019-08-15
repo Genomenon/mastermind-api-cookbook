@@ -149,6 +149,8 @@ def disease_search(disease=None):
     return pmids_by_gene_pair
 
 def aggregate_article_info(pmids_by_gene_pair):
+    pmid_info = {}
+
     for gene_pair, values in pmids_by_gene_pair.items():
         diseases_by_pmids = defaultdict(lambda: [])
         variants_by_pmids = defaultdict(lambda: [])
@@ -160,8 +162,12 @@ def aggregate_article_info(pmids_by_gene_pair):
             current += 1
             print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(gene_pair).upper() + ':', suffix = 'Complete', bar_length = 50)
 
-            # Get article_info for each PMID
-            data = api_get("article_info", {'pmid': pmid})
+            if pmid in pmid_info:
+                data = pmid_info[pmid]
+            else:
+                # Get article_info for each PMID
+                data = api_get("article_info", {'pmid': pmid})
+                pmid_info[pmid] = data
 
             if 'diseases' in data:
                 for disease in data['diseases']:
