@@ -1,11 +1,44 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import json, requests, urllib, sys, re
+"""Discover gene fusion evidence for desired disease or gene(s).
+
+Usage:
+
+Before running this code, first change the API_TOKEN line below to your
+Mastermind API key and save the updated file.
+
+You may also choose to increase or decrease the DEFAULT_MAX_ARTICLES value
+below. Increasing the number of articles to look through for each gene-fusion
+candidate will increase the sensitivity of the found associations, but will
+also increase the number of API calls used and also the amount of time it takes
+to run. The maximum value is 5000.
+
+Then run the file directly from the command line:
+    ./gene_fusion_evidence.py
+
+You will be prompted to choose the desired mode for discovery, whether you're
+starting from a known disease, a known gene-candidate, or a known gene-fusion
+pair. Then you'll be prompted for the known inputs based on the chosen input
+mode.
+
+You will also be prompted the desired output mode, whether you want a full
+report of variants, diseases, and PMIDs associated with the found gene fusion
+candidate(s), or just the list of PMIDs associated with the found gene fusion
+candidate(s).
+"""
+
+import sys
+import re
+import json
+import requests
+import urllib
 from collections import defaultdict
 
 URL = "https://mastermind.genomenon.com/api/v2/"
 # Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
 API_TOKEN = "INSERT API TOKEN HERE"
+# Maxiumum value below is 5000.
 DEFAULT_MAX_ARTICLES = 1000
 _sensitivity = DEFAULT_MAX_ARTICLES
 
