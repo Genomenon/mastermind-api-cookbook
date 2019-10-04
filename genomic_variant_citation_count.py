@@ -1,4 +1,24 @@
-import requests, urllib, sys
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Get evidence citation count for variant from HGVS genomic coordinate
+description from Mastermind API.
+
+Usage:
+
+Before running this code, first change the API_TOKEN line below to your
+Mastermind API key and save the updated file.
+
+Then run the file directly from the command line:
+    ./genomic_variant_citation_count.py
+
+You will be prompted to type in the HGVS genomic coordinate description of the
+desired variant and hit Enter.
+"""
+
+import sys
+import urllib
+import requests
 
 URL = "https://mastermind.genomenon.com/api/v2/"
 # Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
