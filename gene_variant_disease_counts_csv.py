@@ -151,7 +151,7 @@ def main(args):
     canonical_disease = disease_data[0]['canonical']
     encoded_disease = encode(canonical_disease)
 
-    output.append(["SYMBOL", "Variant", "MM Code", "MM Variant Link", "Variant " + canonical_disease + " Articles in MM (Article Count", "Variant Article Count in MM", "Variant Diseases in MM (Article Count)", "MM Gene Link", "Gene " + canonical_disease + " Articles in MM (Article Count)", "Gene Article Count in MM", "Gene Diseases in MM (Article Count)"])
+    output.append(["SYMBOL", "Variant", "MM Code", "MM Variant Link", "Variant " + "\"" + re.sub(r"\"", "\"\"", canonical_disease) + "\"" + " Articles in MM (Article Count", "Variant Article Count in MM", "Variant Diseases in MM (Article Count)", "MM Gene Link", "Gene " + canonical_disease + " Articles in MM (Article Count)", "Gene Article Count in MM", "Gene Diseases in MM (Article Count)"])
 
     with open(filename, "r") as lines:
         readlines = False
