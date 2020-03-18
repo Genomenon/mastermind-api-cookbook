@@ -17,7 +17,7 @@ BRAF
 KRAS
 
 Then run the file directly from the command line:
-    ./gene_newly_published_evidence.py my_gene_list.txt
+    ./gene_newly_matched_evidence.py my_gene_list.txt
 
 For my_gene_list.txt as an input, this will generate 4 output CSV files:
     my_gene_list.articles.csv
@@ -119,8 +119,6 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
     if iteration == total:
         sys.stdout.write('\n')
     sys.stdout.flush()
-
-def get_gene(gene_input):
 
 def get_articles(options):
     data = api_get("articles", options)
@@ -257,11 +255,11 @@ def main(args):
             if period_count > 0:
                 genes_with_articles += 1
 
-                if WITH_VARIANTS:
+                if ONLY_VARIANTS:
                     variants = api_gene_journals_since("variants", canonical_gene, BEGIN)
                     print "Found " + str(variants["variant_count"]) + " variants"
 
-                if !WITH_VARIANTS or variants["variant_count"] > 0:
+                if (not ONLY_VARIANTS) or variants["variant_count"] > 0:
                     begin_pmids = get_articles(filtered_params(canonical_gene, BEGIN))
                     if END == None:
                         end_pmids = []
