@@ -177,8 +177,8 @@ def aggregate_article_info(gene_info, all_genes):
     for gene, values in gene_info.items():
         pmids_by_disease = defaultdict(lambda: [])
         pmids_by_phenotype = defaultdict(lambda: [])
-        pmids_by_variant = defaultdict(lambda: [])
-        pmids_by_gene = defaultdict(lambda: [])
+        pmids_by_gene = defaultdict(lambda: defaultdict(lambda: []))
+        pmids_by_variant = defaultdict(lambda: defaultdict(lambda: []))
 
         current = 0
         total = len(values['pmids'])
@@ -213,7 +213,6 @@ def aggregate_article_info(gene_info, all_genes):
                 for disease in data['diseases']:
                     pmids_by_disease[disease['key']].append(pmid)
 
-                    disease_info[disease['key']]['genes'].add(gene)
                     disease_info[disease['key']]['pmids'].add(pmid)
 
                 for disease_key, pmids in pmids_by_disease.items():
@@ -225,6 +224,7 @@ def aggregate_article_info(gene_info, all_genes):
                 for phenotype in data['hpo_terms']:
                     pmids_by_phenotype[phenotype['term']].append(pmid)
                     phenotype_info[phenotype['term']]['pmids'].add(pmid)
+                    phenotype_info[phenotype['term']]['id'] = phenotype['key']
 
                     for disease_key, pmids in pmids_by_disease.items():
                         disease_info[disease_key]["phenotypes"].add(phenotype['term'])
@@ -236,34 +236,61 @@ def aggregate_article_info(gene_info, all_genes):
                             phenotype_info[phenotype_term]["phenotypes"].add(other_phenotype_term)
 
             for pmid_gene in data['genes']:
-                if process_article:
-                    if pmid_gene['symbol'].lower() in all_genes:
+                if pmid_gene['symbol'].lower() in all_genes:
+                    if process_article:
                         article_info[pmid]['matched_genes'].append(pmid_gene['symbol'])
-                    else:
+
+                    for phenotype_term, pmids in pmids_by_phenotype.items():
+                        phenotype_info[phenotype_term]["matched_genes"].add(pmid_gene['symbol'])
+
+                    for disease_key, pmids in pmids_by_disease.items():
+                        disease_info[disease_key]['matched_genes'].add(pmid_gene['symbol'])
+                else:
+                    if process_article:
                         article_info[pmid]['other_genes'].append(pmid_gene['symbol'])
 
-                if pmid_gene['symbol'] != gene:
-                    pmids_by_gene[pmid_gene['symbol']].append(pmid)
+                    for phenotype_term, pmids in pmids_by_phenotype.items():
+                        phenotype_info[phenotype_term]["other_genes"].add(pmid_gene['symbol'])
 
-                for phenotype_term, pmids in pmids_by_phenotype.items():
-                    phenotype_info[phenotype_term]["genes"].add(pmid_gene['symbol'])
+                    for disease_key, pmids in pmids_by_disease.items():
+                        disease_info[disease_key]['other_genes'].add(pmid_gene['symbol'])
+
+                if pmid_gene['symbol'].lower() != gene:
+                    if pmid_gene['symbol'].lower() in all_genes:
+                        pmids_by_gene['matched_genes'][pmid_gene['symbol']].append(pmid)
+                    else:
+                        pmids_by_gene['other_genes'][pmid_gene['symbol']].append(pmid)
 
                 if 'variants' in pmid_gene:
                     for variant in pmid_gene['variants']:
                         variant_name = pmid_gene['symbol'] + ':' + variant['key']
-                        pmids_by_variant[variant_name].append(pmid)
 
-                        if process_article:
-                            if pmid_gene['symbol'].lower() in all_genes:
+                        if pmid_gene['symbol'].lower() in all_genes:
+                            if process_article:
                                 article_info[pmid]['matched_gene_variants'].append(variant_name)
+
+                            if pmid_gene['symbol'].lower() == gene:
+                                pmids_by_variant['gene_variants'][variant_name].append(pmid)
                             else:
+                                pmids_by_variant['matched_gene_variants'][variant_name].append(pmid)
+
+                            for phenotype_term, pmids in pmids_by_phenotype.items():
+                                phenotype_info[phenotype_term]["matched_gene_variants"].add(variant_name)
+
+                            for disease_key, pmids in pmids_by_disease.items():
+                                disease_info[disease_key]['matched_gene_variants'].add(variant_name)
+
+                        else:
+                            if process_article:
                                 article_info[pmid]['other_gene_variants'].append(variant_name)
 
-                        for disease_key, pmids in pmids_by_disease.items():
-                            disease_info[disease_key]["variants"].add(variant_name)
+                            pmids_by_variant['other_gene_variants'][variant_name].append(pmid)
 
-                        for phenotype_term, pmids in pmids_by_phenotype.items():
-                            phenotype_info[phenotype_term]["variants"].add(variant_name)
+                            for phenotype_term, pmids in pmids_by_phenotype.items():
+                                phenotype_info[phenotype_term]["other_gene_variants"].add(variant_name)
+
+                            for disease_key, pmids in pmids_by_disease.items():
+                                disease_info[disease_key]['other_gene_variants'].add(variant_name)
 
         gene_info[gene]['diseases'] = pmids_by_disease
         gene_info[gene]['phenotypes'] = pmids_by_phenotype
@@ -332,11 +359,12 @@ def main(args):
     articles_file_path = filename + ".articles.csv"
     print("Article info in " + articles_file_path)
     with codecs.open(articles_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["PMID", "Journal", "Title", "Publication Date", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes"]) + "\n")
+        output_file.write(",".join(["PMID", "Link", "Journal", "Title", "Publication Date", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes"]) + "\n")
         for pmid, article in article_info.items():
             if skip_article(article, all_genes):
                 continue
 
+            url = re.sub(r'([&\?])gene=[^&]+', r'\1gene=' + encode(article["matched_genes"][0]), article["url"])
             pmid_diseases = []
             pmid_phenotypes = []
             pmid_genes = []
@@ -354,7 +382,7 @@ def main(args):
             if "hpo_terms" in article:
                 pmid_phenotypes = [phenotype["term"] or "[None]" for phenotype in article["hpo_terms"]]
 
-            output_file.write(",".join([pmid] + [pipe_delimited_field(field) for field in [[journal], [title], [article["publication_date"]], article["matched_genes"], article["other_genes"], article["matched_gene_variants"], article["other_gene_variants"], pmid_diseases, pmid_phenotypes]]) + "\n")
+            output_file.write(",".join([pmid] + [pipe_delimited_field(field) for field in [[url], [journal], [title], [article["publication_date"]], article["matched_genes"], article["other_genes"], article["matched_gene_variants"], article["other_gene_variants"], pmid_diseases, pmid_phenotypes]]) + "\n")
 
     print('-'*100)
 
@@ -362,9 +390,10 @@ def main(args):
     diseases_file_path = filename + ".diseases.csv"
     print("Disease info in " + diseases_file_path)
     with codecs.open(diseases_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["Disease", "PMIDs", "Genes", "Variants", "Other Diseases", "Phenotypes"]) + "\n")
+        output_file.write(",".join(["Disease", "Link", "PMIDs", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Other Diseases", "Phenotypes"]) + "\n")
         for disease, info in disease_info.items():
-            output_file.write(",".join([pipe_delimited_field(field) for field in [[disease], info["pmids"], info["genes"], info["variants"], info["diseases"], info["phenotypes"]]]) + "\n")
+            url = "https://mastermind.genomenon.com/detail?gene=" + encode(next(iter(info["matched_genes"]))) + "&disease=" + encode(disease)
+            output_file.write(",".join([pipe_delimited_field(field) for field in [[disease], [url], info["pmids"], info["matched_genes"], info["other_genes"], info["matched_gene_variants"], info["other_gene_variants"], info["diseases"], info["phenotypes"]]]) + "\n")
 
     print('-'*100)
 
@@ -372,9 +401,10 @@ def main(args):
     phenotypes_file_path = filename + ".phenotypes.csv"
     print("Phenotype info in " + phenotypes_file_path)
     with codecs.open(phenotypes_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["Phenotype", "PMIDs", "Genes", "Variants", "Diseases", "Other Phenotypes"]) + "\n")
+        output_file.write(",".join(["Phenotype", "Link", "PMIDs", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Other Phenotypes"]) + "\n")
         for phenotype, info in phenotype_info.items():
-            output_file.write(",".join([pipe_delimited_field(field) for field in [[phenotype], info["pmids"], info["genes"], info["variants"], info["diseases"], info["phenotypes"]]]) + "\n")
+            url = "https://mastermind.genomenon.com/detail?gene=" + encode(next(iter(info["matched_genes"]))) + "&hpo=" + encode(info["id"])
+            output_file.write(",".join([pipe_delimited_field(field) for field in [[phenotype], [url], info["pmids"], info["matched_genes"], info["other_genes"], info["matched_gene_variants"], info["other_gene_variants"], info["diseases"], info["phenotypes"]]]) + "\n")
 
     print('-'*100)
 
@@ -382,13 +412,17 @@ def main(args):
     genes_file_path = filename + ".genes.csv"
     print("Gene info in " + genes_file_path)
     with codecs.open(genes_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["Gene", "PMIDs", "Other Genes", "Variants", "Diseases", "Phenotypes"]) + "\n")
+        output_file.write(",".join(["Gene", "Link", "PMIDs", "Matched Genes", "Other Genes", "Gene Variants", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes"]) + "\n")
         for gene, info in gene_info.items():
+            url = "https://mastermind.genomenon.com/detail?gene=" + encode(gene)
             gene_diseases = [gene_disease for gene_disease in info["diseases"].keys()]
             gene_phenotypes = [gene_phenotype for gene_phenotype in info["phenotypes"].keys()]
-            gene_genes = [gene_gene for gene_gene in info["genes"].keys()]
-            gene_variants = [gene_variant for gene_variant in info["variants"].keys()]
-            output_file.write(",".join([pipe_delimited_field(field) for field in [[gene], info["filtered_pmids"], gene_genes, gene_variants, gene_diseases, gene_phenotypes]]) + "\n")
+            matched_genes = [matched_gene for matched_gene in info["genes"]["matched_genes"].keys()]
+            other_genes = [other_gene for other_gene in info["genes"]["other_genes"].keys()]
+            gene_variants = [gene_variant for gene_variant in info["variants"]["gene_variants"].keys()]
+            matched_gene_variants = [gene_variant for gene_variant in info["variants"]["matched_gene_variants"].keys()]
+            other_gene_variants = [gene_variant for gene_variant in info["variants"]["other_gene_variants"].keys()]
+            output_file.write(",".join([pipe_delimited_field(field) for field in [[gene], [url], info["filtered_pmids"], matched_genes, other_genes, gene_variants, matched_gene_variants, other_gene_variants, gene_diseases, gene_phenotypes]]) + "\n")
 
     print('-'*100)
 
