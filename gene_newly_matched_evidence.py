@@ -64,12 +64,18 @@ URL = "https://mastermind.genomenon.com/api/v2/"
 # Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
 API_TOKEN = "INSERT API TOKEN HERE"
 
+# Whether or not to use the JOURNALS list to filter results
+FILTER_JOURNALS = False
+
 # Filter by articles from the following journals using ISO 4 abbreviated identifiers:
 JOURNALS = ["Hum. Mutat.", "Am. J. Hum. Genet.", "J. Med. Genet.", "Nat. Genet.", "Hum. Genet.", "Hum. Mol. Genet.", "Eur. J. Hum. Genet.", "Clin. Genet.", "Genet. Med.", "PLOS ONE"]
 
 # Filter by articles first matching input genes since this date.
 # Defualt is 30 days before today, but can also specify a specific date:
-BEGIN = datetime.date.today() - datetime.timedelta(days=30) #datetime.datetime(2019,11,26)
+BEGIN = datetime.date.today() - datetime.timedelta(days=14) #datetime.datetime(2019,11,26)
+
+# Whether or not to filter out articles published before BEGIN date
+FILTER_PUBLISHED_DATE = False #BEGIN - datetime.timedelta(days=60)
 
 # Filter by articles first matching input genes before this date (set to None for no END date filtering):
 END = None #datetime.datetime(2019,11,1)
@@ -92,7 +98,26 @@ def api_get(endpoint, options):
     return json_or_print_error(response)
 
 def filtered_params(gene, since):
-    return {'gene': gene, 'journals[]': JOURNALS, 'since': int(time.mktime(since.timetuple()))}
+    filter_params = {'gene': gene, 'since': int(time.mktime(since.timetuple()))}
+    if FILTER_JOURNALS:
+        filter_params['journals[]'] = JOURNALS
+    return filter_params
+
+def skip_article(pmid_data, all_genes):
+    return filter_after_published_date(pmid_data) or filter_no_variants(pmid_data, all_genes)
+
+def filter_after_published_date(pmid_data):
+    return FILTER_PUBLISHED_DATE and datetime.datetime.strptime(pmid_data['publication_date'], '%Y-%m-%d').date() < FILTER_PUBLISHED_DATE
+
+def filter_no_variants(pmid_data, all_genes):
+    if not ONLY_VARIANTS:
+        return False
+
+    for pmid_gene in pmid_data['genes']:
+        if pmid_gene['symbol'].lower() in all_genes and 'variants' in pmid_gene and len(pmid_gene['variants']) > 0:
+            return False
+
+    return True
 
 def json_or_print_error(response):
     if response.status_code == requests.codes.ok:
@@ -144,7 +169,7 @@ def get_articles(options):
 
     return pmids
 
-def aggregate_article_info(gene_info):
+def aggregate_article_info(gene_info, all_genes):
     article_info = {}
     disease_info = defaultdict(lambda: defaultdict(lambda: set([])))
     phenotype_info = defaultdict(lambda: defaultdict(lambda: set([])))
@@ -158,16 +183,31 @@ def aggregate_article_info(gene_info):
         current = 0
         total = len(values['pmids'])
 
+        gene_info[gene]['filtered_pmids'] = []
+
         for pmid in values['pmids']:
             current += 1
             print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(gene).upper() + ':', suffix = 'Complete', bar_length = 50)
 
             if pmid in article_info:
                 data = article_info[pmid]
+                process_article = False
             else:
                 # Get article_info for each PMID
                 data = api_get("article_info", {'pmid': pmid})
                 article_info[pmid] = data
+
+                process_article = True
+                article_info[pmid]["matched_genes"] = []
+                article_info[pmid]["other_genes"] = []
+                article_info[pmid]["matched_gene_variants"] = []
+                article_info[pmid]["other_gene_variants"] = []
+
+
+            if skip_article(data, all_genes):
+                continue
+
+            gene_info[gene]['filtered_pmids'].append(pmid)
 
             if 'diseases' in data:
                 for disease in data['diseases']:
@@ -196,6 +236,12 @@ def aggregate_article_info(gene_info):
                             phenotype_info[phenotype_term]["phenotypes"].add(other_phenotype_term)
 
             for pmid_gene in data['genes']:
+                if process_article:
+                    if pmid_gene['symbol'].lower() in all_genes:
+                        article_info[pmid]['matched_genes'].append(pmid_gene['symbol'])
+                    else:
+                        article_info[pmid]['other_genes'].append(pmid_gene['symbol'])
+
                 if pmid_gene['symbol'] != gene:
                     pmids_by_gene[pmid_gene['symbol']].append(pmid)
 
@@ -206,6 +252,12 @@ def aggregate_article_info(gene_info):
                     for variant in pmid_gene['variants']:
                         variant_name = pmid_gene['symbol'] + ':' + variant['key']
                         pmids_by_variant[variant_name].append(pmid)
+
+                        if process_article:
+                            if pmid_gene['symbol'].lower() in all_genes:
+                                article_info[pmid]['matched_gene_variants'].append(variant_name)
+                            else:
+                                article_info[pmid]['other_gene_variants'].append(variant_name)
 
                         for disease_key, pmids in pmids_by_disease.items():
                             disease_info[disease_key]["variants"].add(variant_name)
@@ -256,7 +308,7 @@ def main(args):
                 genes_with_articles += 1
 
                 if ONLY_VARIANTS:
-                    variants = api_gene_journals_since("variants", canonical_gene, BEGIN)
+                    variants = api_get("variants", filtered_params(canonical_gene, BEGIN))
                     print "Found " + str(variants["variant_count"]) + " variants"
 
                 if (not ONLY_VARIANTS) or variants["variant_count"] > 0:
@@ -271,7 +323,8 @@ def main(args):
                     gene_info[canonical_gene] = {'pmids': period_pmids}
 
     # Aggregate all article info, from which other aggregations will be generated
-    gene_info, article_info, disease_info, phenotype_info = aggregate_article_info(gene_info)
+    all_genes = gene_info.keys()
+    gene_info, article_info, disease_info, phenotype_info = aggregate_article_info(gene_info, all_genes)
 
     print('-'*100)
 
@@ -279,8 +332,11 @@ def main(args):
     articles_file_path = filename + ".articles.csv"
     print("Article info in " + articles_file_path)
     with codecs.open(articles_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["PMID", "Journal", "Title", "Publication Date", "Genes", "Variants", "Diseases", "Phenotypes"]) + "\n")
+        output_file.write(",".join(["PMID", "Journal", "Title", "Publication Date", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes"]) + "\n")
         for pmid, article in article_info.items():
+            if skip_article(article, all_genes):
+                continue
+
             pmid_diseases = []
             pmid_phenotypes = []
             pmid_genes = []
@@ -297,12 +353,8 @@ def main(args):
                 pmid_diseases = [disease["key"] or "[None]" for disease in article["diseases"]]
             if "hpo_terms" in article:
                 pmid_phenotypes = [phenotype["term"] or "[None]" for phenotype in article["hpo_terms"]]
-            for gene in article["genes"]:
-                pmid_genes.append(gene["symbol"])
-                if "variants" in gene:
-                    pmid_variants.extend([gene["symbol"] + ":" + variant["key"] for variant in gene["variants"]])
 
-            output_file.write(",".join([pmid] + [pipe_delimited_field(field) for field in [[journal], [title], [article["publication_date"]], pmid_genes, pmid_variants, pmid_diseases, pmid_phenotypes]]) + "\n")
+            output_file.write(",".join([pmid] + [pipe_delimited_field(field) for field in [[journal], [title], [article["publication_date"]], article["matched_genes"], article["other_genes"], article["matched_gene_variants"], article["other_gene_variants"], pmid_diseases, pmid_phenotypes]]) + "\n")
 
     print('-'*100)
 
@@ -336,7 +388,7 @@ def main(args):
             gene_phenotypes = [gene_phenotype for gene_phenotype in info["phenotypes"].keys()]
             gene_genes = [gene_gene for gene_gene in info["genes"].keys()]
             gene_variants = [gene_variant for gene_variant in info["variants"].keys()]
-            output_file.write(",".join([pipe_delimited_field(field) for field in [[gene], info["pmids"], gene_genes, gene_variants, gene_diseases, gene_phenotypes]]) + "\n")
+            output_file.write(",".join([pipe_delimited_field(field) for field in [[gene], info["filtered_pmids"], gene_genes, gene_variants, gene_diseases, gene_phenotypes]]) + "\n")
 
     print('-'*100)
 
@@ -345,13 +397,15 @@ def main(args):
     print("Association info in " + associations_file_path)
     with codecs.open(associations_file_path, 'wb', 'utf-8') as output_file:
         for gene, data in gene_info.items():
-            if len(data['pmids']) == 0:
-                output_file.write("No articles found with " + str(gene).upper() + "\n")
+            if len(data['filtered_pmids']) == 0:
+                qualifier = '' if len(data['pmids']) == 0 else ' and filters'
+                output_file.write("No articles found with " + str(gene).upper() + qualifier + "\n")
             else:
+                qualifier = '' if len(data['pmids']) == len(data['filtered_pmids']) else ' with filters'
                 output_file.write("Found the following associations for " + str(gene).upper() + ":\n")
 
                 output_file.write("\tPMIDs:\n")
-                output_file.write("\t\t" + ', '.join(data['pmids']) + "\n")
+                output_file.write("\t\t" + ', '.join(data['filtered_pmids']) + "\n")
 
                 output_file.write("\tGenes with supporting PMIDs:\n")
                 if len(data['genes']) == 0:
