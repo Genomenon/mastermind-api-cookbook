@@ -215,10 +215,9 @@ def aggregate_article_info(gene_info, all_genes):
 
                     disease_info[disease['key']]['pmids'].add(pmid)
 
-                for disease_key, pmids in pmids_by_disease.items():
-                    for other_disease_key, other_pmids in pmids_by_disease.items():
-                        if other_disease_key != disease_key:
-                            disease_info[disease_key]["diseases"].add(other_disease_key)
+                    for other_disease in data['diseases']:
+                        if other_disease['key'] != disease['key']:
+                            disease_info[disease['key']]["diseases"].add(other_disease['key'])
 
             if 'hpo_terms' in data:
                 for phenotype in data['hpo_terms']:
@@ -226,34 +225,38 @@ def aggregate_article_info(gene_info, all_genes):
                     phenotype_info[phenotype['term']]['pmids'].add(pmid)
                     phenotype_info[phenotype['term']]['id'] = phenotype['key']
 
-                    for disease_key, pmids in pmids_by_disease.items():
-                        disease_info[disease_key]["phenotypes"].add(phenotype['term'])
-                        phenotype_info[phenotype['term']]['diseases'].add(disease_key)
+                    if 'diseases' in data:
+                        for disease in data['diseases']:
+                            disease_info[disease['key']]["phenotypes"].add(phenotype['term'])
+                            phenotype_info[phenotype['term']]['diseases'].add(disease['key'])
 
-                for phenotype_term, pmids in pmids_by_phenotype.items():
-                    for other_phenotype_term, other_pmids in pmids_by_phenotype.items():
-                        if other_phenotype_term != phenotype_term:
-                            phenotype_info[phenotype_term]["phenotypes"].add(other_phenotype_term)
+                    for other_phenotype in data['hpo_terms']:
+                        if other_phenotype['term'] != phenotype['term']:
+                            phenotype_info[phenotype['term']]["phenotypes"].add(other_phenotype['term'])
 
             for pmid_gene in data['genes']:
                 if pmid_gene['symbol'].lower() in all_genes:
                     if process_article:
                         article_info[pmid]['matched_genes'].append(pmid_gene['symbol'])
 
-                    for phenotype_term, pmids in pmids_by_phenotype.items():
-                        phenotype_info[phenotype_term]["matched_genes"].add(pmid_gene['symbol'])
+                    if 'hpo_terms' in data:
+                        for phenotype in data['hpo_terms']:
+                            phenotype_info[phenotype['term']]["matched_genes"].add(pmid_gene['symbol'])
 
-                    for disease_key, pmids in pmids_by_disease.items():
-                        disease_info[disease_key]['matched_genes'].add(pmid_gene['symbol'])
+                    if 'diseases' in data:
+                        for disease in data['diseases']:
+                            disease_info[disease['key']]['matched_genes'].add(pmid_gene['symbol'])
                 else:
                     if process_article:
                         article_info[pmid]['other_genes'].append(pmid_gene['symbol'])
 
-                    for phenotype_term, pmids in pmids_by_phenotype.items():
-                        phenotype_info[phenotype_term]["other_genes"].add(pmid_gene['symbol'])
+                    if 'hpo_terms' in data:
+                        for phenotype in data['hpo_terms']:
+                            phenotype_info[phenotype['term']]["other_genes"].add(pmid_gene['symbol'])
 
-                    for disease_key, pmids in pmids_by_disease.items():
-                        disease_info[disease_key]['other_genes'].add(pmid_gene['symbol'])
+                    if 'diseases' in data:
+                        for disease in data['diseases']:
+                            disease_info[disease['key']]['other_genes'].add(pmid_gene['symbol'])
 
                 if pmid_gene['symbol'].lower() != gene:
                     if pmid_gene['symbol'].lower() in all_genes:
@@ -274,11 +277,13 @@ def aggregate_article_info(gene_info, all_genes):
                             else:
                                 pmids_by_variant['matched_gene_variants'][variant_name].append(pmid)
 
-                            for phenotype_term, pmids in pmids_by_phenotype.items():
-                                phenotype_info[phenotype_term]["matched_gene_variants"].add(variant_name)
+                            if 'hpo_terms' in data:
+                                for phenotype in data['hpo_terms']:
+                                    phenotype_info[phenotype['term']]["matched_gene_variants"].add(variant_name)
 
-                            for disease_key, pmids in pmids_by_disease.items():
-                                disease_info[disease_key]['matched_gene_variants'].add(variant_name)
+                            if 'diseases' in data:
+                                for disease in data['diseases']:
+                                    disease_info[disease['key']]['matched_gene_variants'].add(variant_name)
 
                         else:
                             if process_article:
@@ -286,11 +291,13 @@ def aggregate_article_info(gene_info, all_genes):
 
                             pmids_by_variant['other_gene_variants'][variant_name].append(pmid)
 
-                            for phenotype_term, pmids in pmids_by_phenotype.items():
-                                phenotype_info[phenotype_term]["other_gene_variants"].add(variant_name)
+                            if 'hpo_terms' in data:
+                                for phenotype in data['hpo_terms']:
+                                    phenotype_info[phenotype['term']]["other_gene_variants"].add(variant_name)
 
-                            for disease_key, pmids in pmids_by_disease.items():
-                                disease_info[disease_key]['other_gene_variants'].add(variant_name)
+                            if 'diseases' in data:
+                                for disease in data['diseases']:
+                                    disease_info[disease['key']]['other_gene_variants'].add(variant_name)
 
         gene_info[gene]['diseases'] = pmids_by_disease
         gene_info[gene]['phenotypes'] = pmids_by_phenotype
