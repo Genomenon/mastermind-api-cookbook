@@ -88,6 +88,30 @@ ONLY_VARIANTS = True
 # Input genes which return no data won't count toward this number:
 STOP_AFTER = False #5
 
+# Advanced score post-processing calculations based on context. Provided sample
+# score weights for therapy-focused analysis.
+INCLUDE_SCORE = True
+
+INCLUDE_SUBSCORES = True
+
+SCORE_WEIGHTS = {
+        'Matched Genes Count': 3,
+        'Matched Variants Count': 5,
+        'Other Genes Count': 0.1,
+        'Other Variants Count': 0.2,
+        'Matched Gene to Other Gene Ratio': 25,
+        'Matched Gene Variant to Other Variant Ratio': 25,
+        'Diseases Count': 0.1,
+        'Phenotypes Count': 0.1,
+        'Therapies Count': 0.1,
+        'Matched Genes in Title': 30,
+        'Matched Gene Variants in Title': 30,
+        'Therapies in Title': 50,
+        'Matched Genes in Abstract': 10,
+        'Matched Gene Variants in Abstract': 10,
+        'Therapies in Abstract': 15
+    }
+
 def api_get(endpoint, options):
     params = options.copy()
     params.update({'api_token': API_TOKEN})
@@ -169,6 +193,42 @@ def get_articles(options):
 
     return pmids
 
+def combine_and_weight(scores):
+    total_score = 0
+    for score, weight in SCORE_WEIGHTS.items():
+        total_score += scores[score] * weight
+
+    return total_score
+
+def score_article(match_data):
+    abstract = '\n'.join([line['text'] for line in match_data['abstract']] if 'abstract' in match_data else [""])
+    # print(match_data["pmid"])
+
+    score_calcs = {
+        'Matched Genes Count': lambda match_data: len(match_data['matched_genes']),
+        'Matched Variants Count': lambda match_data: len(match_data['matched_gene_variants']),
+        'Other Genes Count': lambda match_data: len(match_data['other_genes']),
+        'Other Variants Count': lambda match_data: len(match_data['other_gene_variants']),
+        'Matched Gene to Other Gene Ratio': lambda match_data: float(len(match_data['matched_genes']))/(len(match_data['matched_genes']) + len(match_data['other_genes'])),
+        'Matched Gene Variant to Other Variant Ratio': lambda match_data: float(len(match_data['matched_gene_variants']))/(len(match_data['matched_gene_variants']) + len(match_data['other_gene_variants'])),
+        'Diseases Count': lambda match_data: len(match_data['diseases']) if 'diseases' in match_data else 0,
+        'Phenotypes Count': lambda match_data: len(match_data['hpo_terms']) if 'hpo_terms' in match_data else 0,
+        'Therapies Count': lambda match_data: len(match_data['unii_terms']) if 'unii_terms' in match_data else 0,
+        'Matched Genes in Title': lambda match_data: len([gene for gene in match_data['matched_genes'] if re.search(gene, match_data['title'], re.IGNORECASE)]),
+        'Matched Gene Variants in Title': lambda match_data: len([variant for variant in match_data['matched_gene_variants'] if re.search(variant.split(":")[1], match_data['title'], re.IGNORECASE)]),
+        'Therapies in Title': lambda match_data: len([therapy['term'] for therapy in match_data['unii_terms'] if re.search(re.escape(therapy['term']), match_data['title'], re.IGNORECASE)]) if 'unii_terms' in match_data else 0,
+        'Matched Genes in Abstract': lambda match_data: len([gene for gene in match_data['matched_genes'] if re.search(gene, abstract, re.IGNORECASE)]),
+        'Matched Gene Variants in Abstract': lambda match_data: len([variant for variant in match_data['matched_gene_variants'] if re.search(variant.split(":")[1], abstract, re.IGNORECASE)]),
+        'Therapies in Abstract': lambda match_data: len([therapy['term'] for therapy in match_data['unii_terms'] if re.search(re.escape(therapy['term']), abstract, re.IGNORECASE)]) if 'unii_terms' in match_data else 0
+    }
+
+    scores = {}
+
+    for score, func in score_calcs.items():
+        scores[score] = func(match_data)
+
+    return scores
+
 def aggregate_article_info(gene_info, all_genes):
     article_info = {}
     disease_info = defaultdict(lambda: defaultdict(lambda: set([])))
@@ -197,6 +257,10 @@ def aggregate_article_info(gene_info, all_genes):
             else:
                 # Get article_info for each PMID
                 data = api_get("article_info", {'pmid': pmid})
+                # If request fails, it already prints to stdout that the PMID
+                # is getting skipped, so we can just continue to next PMID
+                if not data:
+                    continue
                 article_info[pmid] = data
 
                 process_article = True
@@ -399,13 +463,34 @@ def main(args):
     all_genes = gene_info.keys()
     gene_info, article_info, disease_info, phenotype_info, therapy_info = aggregate_article_info(gene_info, all_genes)
 
+    if INCLUDE_SCORE or INCLUDE_SUBSCORES:
+        current = 0
+        total = len(article_info)
+
+        for pmid, article in article_info.items():
+            current += 1
+            print_progress(current, total, prefix = 'Calculating scores for articles', suffix = 'Complete', bar_length = 50)
+            if skip_article(article, all_genes):
+                continue
+
+            article_info[pmid]['scores'] = score_article(article)
+            article_info[pmid]['total_score'] = combine_and_weight(article_info[pmid]['scores'])
+
     print('-'*100)
 
     # Save relevant article data for each unique article across the input gene set to articles.csv file
     articles_file_path = filename + ".articles.csv"
     print("Article info in " + articles_file_path)
     with codecs.open(articles_file_path, 'wb', 'utf-8') as output_file:
-        output_file.write(",".join(["PMID", "Link", "Journal", "Title", "Publication Date", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes"]) + "\n")
+        columns = ["PMID", "Link", "Journal", "Title", "Publication Date", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes", "Therapies"]
+
+        if INCLUDE_SCORE:
+            columns += ["Score"]
+        if INCLUDE_SUBSCORES:
+            score_columns = list(SCORE_WEIGHTS.keys())
+            columns += score_columns
+
+        output_file.write(",".join(columns) + "\n")
         for pmid, article in article_info.items():
             if skip_article(article, all_genes):
                 continue
@@ -429,8 +514,17 @@ def main(args):
                 pmid_phenotypes = [phenotype["term"] or "[None]" for phenotype in article["hpo_terms"]]
             if "unii_terms" in article:
                 pmid_therapies = [therapy["term"] or "[None]" for therapy in article["unii_terms"]]
+            else:
+                pmid_therapies = []
 
-            output_file.write(",".join([pmid] + [pipe_delimited_field(field) for field in [[url], [journal], [title], [article["publication_date"]], article["matched_genes"], article["other_genes"], article["matched_gene_variants"], article["other_gene_variants"], pmid_diseases, pmid_phenotypes, pmid_therapies]]) + "\n")
+            fields = [[pmid], [url], [journal], [title], [article["publication_date"]], article["matched_genes"], article["other_genes"], article["matched_gene_variants"], article["other_gene_variants"], pmid_diseases, pmid_phenotypes, pmid_therapies]
+
+            if INCLUDE_SCORE:
+                fields += [[str(round(article["total_score"], 1))]]
+            if INCLUDE_SUBSCORES:
+                fields += [[str(round(article['scores'][score_name], 1))] for score_name in score_columns]
+
+            output_file.write(",".join([pipe_delimited_field(field) for field in fields]) + "\n")
 
     print('-'*100)
 
