@@ -112,14 +112,14 @@ SCORE_WEIGHTS = {
         'Therapies in Abstract': 15
     }
 
-def api_get(endpoint, options):
+def api_get(endpoint, options, tries=0):
     params = options.copy()
     params.update({'api_token': API_TOKEN})
 
     # print("Querying API: ", endpoint, options)
     response = requests.get(url=URL+endpoint, params=params)
 
-    return json_or_print_error(response)
+    return json_or_print_error(response, endpoint, options, tries)
 
 def filtered_params(gene, since):
     filter_params = {'gene': gene, 'since': int(time.mktime(since.timetuple()))}
@@ -143,12 +143,23 @@ def filter_no_variants(pmid_data, all_genes):
 
     return True
 
-def json_or_print_error(response):
+def json_or_print_error(response, endpoint, options, tries):
     if response.status_code == requests.codes.ok:
         return response.json()
     else:
-        print(response.status_code)
-        print(response.text)
+        sys.stdout.write('\n')
+        print("ERROR ENCOUNTERED. ERROR CODE: " + str(response.status_code))
+        if response.status_code != 500 and response.text:
+            print("\t" + response.text)
+        print("\tRESULTING FROM REQUEST: " + endpoint)
+        print("\tWITH PARAMS: " + str(options))
+        if response.status_code in [408, 500]:
+            if tries < 1:
+                print("Time out error, trying again.")
+                return api_get(endpoint, options, tries+1)
+            else:
+                print("SKIPPING DATA FOR ABOVE REQUEST")
+                return
         sys.exit(0)
 
 def encode(str):
