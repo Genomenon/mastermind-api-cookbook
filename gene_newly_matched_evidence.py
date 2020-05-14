@@ -72,7 +72,7 @@ JOURNALS = ["Hum. Mutat.", "Am. J. Hum. Genet.", "J. Med. Genet.", "Nat. Genet."
 
 # Filter by articles first matching input genes since this date.
 # Defualt is 30 days before today, but can also specify a specific date:
-BEGIN = datetime.date.today() - datetime.timedelta(days=14) #datetime.datetime(2019,11,26)
+BEGIN = datetime.datetime.today() - datetime.timedelta(days=14) #datetime.datetime(2019,11,26)
 
 # Whether or not to filter out articles published before BEGIN date
 FILTER_PUBLISHED_DATE = False #BEGIN - datetime.timedelta(days=60)
@@ -107,7 +107,7 @@ def skip_article(pmid_data, all_genes):
     return filter_after_published_date(pmid_data) or filter_no_variants(pmid_data, all_genes)
 
 def filter_after_published_date(pmid_data):
-    return FILTER_PUBLISHED_DATE and datetime.datetime.strptime(pmid_data['publication_date'], '%Y-%m-%d').date() < FILTER_PUBLISHED_DATE
+    return FILTER_PUBLISHED_DATE and datetime.datetime.strptime(pmid_data['publication_date'], '%Y-%m-%d') < FILTER_PUBLISHED_DATE
 
 def filter_no_variants(pmid_data, all_genes):
     if not ONLY_VARIANTS:
