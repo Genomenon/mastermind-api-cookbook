@@ -54,7 +54,7 @@ import re
 import json
 import requests
 import urllib
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import datetime
 import time
 import codecs
@@ -94,23 +94,22 @@ INCLUDE_SCORE = True
 
 INCLUDE_SUBSCORES = True
 
-SCORE_WEIGHTS = {
-        'Matched Genes Count': 3,
-        'Matched Variants Count': 5,
-        'Other Genes Count': 0.1,
-        'Other Variants Count': 0.2,
-        'Matched Gene to Other Gene Ratio': 25,
-        'Matched Gene Variant to Other Variant Ratio': 25,
-        'Diseases Count': 0.1,
-        'Phenotypes Count': 0.1,
-        'Therapies Count': 0.1,
-        'Matched Genes in Title': 30,
-        'Matched Gene Variants in Title': 30,
-        'Therapies in Title': 50,
-        'Matched Genes in Abstract': 10,
-        'Matched Gene Variants in Abstract': 10,
-        'Therapies in Abstract': 15
-    }
+SCORE_WEIGHTS = OrderedDict()
+SCORE_WEIGHTS['Matched Genes Count'] = 3
+SCORE_WEIGHTS['Matched Variants Count'] = 5
+SCORE_WEIGHTS['Other Genes Count'] = 0.1
+SCORE_WEIGHTS['Other Variants Count'] = 0.2
+SCORE_WEIGHTS['Matched Gene to Other Gene Ratio'] = 25
+SCORE_WEIGHTS['Matched Gene Variant to Other Variant Ratio'] = 25
+SCORE_WEIGHTS['Diseases Count'] = 0.1
+SCORE_WEIGHTS['Phenotypes Count'] = 0.1
+SCORE_WEIGHTS['Therapies Count'] = 0.1
+SCORE_WEIGHTS['Matched Genes in Title'] = 30
+SCORE_WEIGHTS['Matched Gene Variants in Title'] = 30
+SCORE_WEIGHTS['Therapies in Title'] = 50
+SCORE_WEIGHTS['Matched Genes in Abstract'] = 10
+SCORE_WEIGHTS['Matched Gene Variants in Abstract'] = 10
+SCORE_WEIGHTS['Therapies in Abstract'] = 15
 
 def api_get(endpoint, options, tries=0):
     params = options.copy()
