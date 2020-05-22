@@ -92,18 +92,12 @@ specificity (and decrease sensitivity) of the associaitons file.
 
 import sys
 import re
-import json
-import requests
-import urllib
 from collections import defaultdict
 import datetime
 import time
 import codecs
 
-URL = "https://mastermind.genomenon.com/api/v2/"
-
-# Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
-API_TOKEN = "INSERT API TOKEN HERE"
+import base
 
 # Don't include articles that lack PHENOTYPES:
 FILTER_ON_PHENOTYPES = False
@@ -116,69 +110,23 @@ STOP_AFTER = False #5
 # For large data sets, shrink size of associations file by ommitting associations with only one matching PMID
 OMIT_ONE_PMID_MATCHES_FROM_ASSOCIATIONS_FILE = False
 
-def api_get(endpoint, options, tries=0):
-    params = options.copy()
-    params.update({'api_token': API_TOKEN})
-
-    # print("Querying API: ", endpoint, options)
-    response = requests.get(url=URL+endpoint, params=params)
-
-    return json_or_print_error(response, endpoint, options, tries)
-
-def json_or_print_error(response, endpoint, options, tries):
-    if response.status_code == requests.codes.ok:
-        return response.json()
-    else:
-        sys.stdout.write('\n')
-        print("ERROR ENCOUNTERED. ERROR CODE: " + str(response.status_code))
-        if response.status_code != 500 and response.text:
-            print("\t" + response.text)
-        print("\tRESULTING FROM REQUEST: " + endpoint)
-        print("\tWITH PARAMS: " + str(options))
-        if response.status_code in [408, 500]:
-            if tries < 1:
-                print("Time out error, trying again.")
-                return api_get(endpoint, options, tries+1)
-            else:
-                print("SKIPPING DATA FOR ABOVE REQUEST")
-                return
-        sys.exit(0)
-
-def encode(str):
-    if sys.version_info[0] < 3:
-        return urllib.quote_plus(str)
-    else:
-        return urllib.parse.quote_plus(str)
-
-def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
-    str_format = "{0:." + str(decimals) + "f}"
-    percents = str_format.format(100 * (iteration / float(total)))
-    filled_length = int(round(bar_length * iteration / float(total)))
-    bar = 'M' * filled_length + '-' * (bar_length - filled_length)
-
-    sys.stdout.write('\r%s |%s| %s%s %s' % (prefix, bar, percents, '%', suffix)),
-
-    if iteration == total:
-        sys.stdout.write('\n')
-    sys.stdout.flush()
-
 def get_articles(options):
-    data = api_get("articles", options)
+    data = base.api_request("articles", options)
     if "articles" in data:
         pmids = [article['pmid'] for article in data['articles']]
 
         articles = int(data['article_count'])
         pages = int(data['pages'])
 
-        print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
+        base.print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
         if pages > 1:
             for page in range(2, pages+1):
             # for page in range(2, 3):
-                print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
+                base.print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
                 options.update({'page': page})
-                data = api_get("articles", options)
+                data = base.api_request("articles", options)
                 pmids = pmids + [article['pmid'] for article in data['articles']]
     else:
         articles = 0
@@ -216,13 +164,13 @@ def aggregate_article_info(variant_info, phenotypes):
         for pmid in values['pmids']:
             current += 1
             pmid_matches_phenotypes = False
-            print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(variant) + ':', suffix = 'Complete', bar_length = 50)
+            base.print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(variant) + ':', suffix = 'Complete', bar_length = 50)
 
             if pmid in article_info:
                 data = article_info[pmid]
             else:
                 # Get article_info for each PMID
-                data = api_get("article_info", {'pmid': pmid})
+                data = base.api_request("article_info", {'pmid': pmid})
                 article_info[pmid] = data
 
             if data == None:
@@ -323,8 +271,8 @@ def main(args):
     phenotypes_parsed = 1
     total_phenotypes = len(phenotype_inputs)
     for phenotype in phenotype_inputs:
-        print_progress(phenotypes_parsed, total_phenotypes, prefix = 'Parsing phenotypes:', suffix = 'Complete', bar_length = 50)
-        phenotype_data = api_get("suggestions", {'hpo': phenotype})
+        base.print_progress(phenotypes_parsed, total_phenotypes, prefix = 'Parsing phenotypes:', suffix = 'Complete', bar_length = 50)
+        phenotype_data = base.api_request("suggestions", {'hpo': phenotype})
         if len(phenotype_data) > 0:
             phenotypes[phenotype_data[0]['name']] = phenotype_data[0]['canonical']
         else:
@@ -337,16 +285,16 @@ def main(args):
             if STOP_AFTER and variants_with_articles > STOP_AFTER:
                 break
             variant_input = line.strip()
-            variant_data = api_get("suggestions", {'variant': variant_input})
+            variant_data = base.api_request("suggestions", {'variant': variant_input})
             if len(variant_data) > 0:
                 canonical_variant = variant_data[0]['canonical']
             else:
                 # Try again with gene suggestion
                 gene_input = variant_input.split(":", 1)
-                gene_data = api_get("suggestions", {'gene': gene_input[0]})
+                gene_data = base.api_request("suggestions", {'gene': gene_input[0]})
                 if len(gene_data) > 0:
                     canonical_gene = gene_data[0]['canonical']
-                    variant_data = api_get("suggestions", {'variant': canonical_gene + ':' + gene_input[1]})
+                    variant_data = base.api_request("suggestions", {'variant': canonical_gene + ':' + gene_input[1]})
                     if len(variant_data) > 0:
                         canonical_variant = variant_data[0]['canonical']
                     else:

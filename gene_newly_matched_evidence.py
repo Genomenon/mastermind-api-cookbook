@@ -51,18 +51,12 @@ output data files after that many genes with non-zero results are found.
 
 import sys
 import re
-import json
-import requests
-import urllib
 from collections import defaultdict, OrderedDict
 import datetime
 import time
 import codecs
 
-URL = "https://mastermind.genomenon.com/api/v2/"
-
-# Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
-API_TOKEN = "INSERT API TOKEN HERE"
+import base
 
 # Whether or not to use the JOURNALS list to filter results
 FILTER_JOURNALS = False
@@ -111,15 +105,6 @@ SCORE_WEIGHTS['Matched Genes in Abstract'] = 10
 SCORE_WEIGHTS['Matched Gene Variants in Abstract'] = 10
 SCORE_WEIGHTS['Therapies in Abstract'] = 15
 
-def api_get(endpoint, options, tries=0):
-    params = options.copy()
-    params.update({'api_token': API_TOKEN})
-
-    # print("Querying API: ", endpoint, options)
-    response = requests.get(url=URL+endpoint, params=params)
-
-    return json_or_print_error(response, endpoint, options, tries)
-
 def filtered_params(gene, since):
     filter_params = {'gene': gene, 'since': int(time.mktime(since.timetuple()))}
     if FILTER_JOURNALS:
@@ -142,45 +127,8 @@ def filter_no_variants(pmid_data, all_genes):
 
     return True
 
-def json_or_print_error(response, endpoint, options, tries):
-    if response.status_code == requests.codes.ok:
-        return response.json()
-    else:
-        sys.stdout.write('\n')
-        print("ERROR ENCOUNTERED. ERROR CODE: " + str(response.status_code))
-        if response.status_code != 500 and response.text:
-            print("\t" + response.text)
-        print("\tRESULTING FROM REQUEST: " + endpoint)
-        print("\tWITH PARAMS: " + str(options))
-        if response.status_code in [408, 500]:
-            if tries < 1:
-                print("Time out error, trying again.")
-                return api_get(endpoint, options, tries+1)
-            else:
-                print("SKIPPING DATA FOR ABOVE REQUEST")
-                return
-        sys.exit(0)
-
-def encode(str):
-    if sys.version_info[0] < 3:
-        return urllib.quote_plus(str)
-    else:
-        return urllib.parse.quote_plus(str)
-
-def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
-    str_format = "{0:." + str(decimals) + "f}"
-    percents = str_format.format(100 * (iteration / float(total)))
-    filled_length = int(round(bar_length * iteration / float(total)))
-    bar = 'M' * filled_length + '-' * (bar_length - filled_length)
-
-    sys.stdout.write('\r%s |%s| %s%s %s' % (prefix, bar, percents, '%', suffix)),
-
-    if iteration == total:
-        sys.stdout.write('\n')
-    sys.stdout.flush()
-
 def get_articles(options):
-    data = api_get("articles", options)
+    data = base.api_request("articles", options)
     if "articles" in data:
         pmids = [article['pmid'] for article in data['articles']]
 
@@ -188,15 +136,15 @@ def get_articles(options):
         pages = int(data['pages'])
 
         date_string = datetime.datetime.fromtimestamp(options["since"]).strftime('%x')
-        print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ' since ' + date_string + ':', suffix = 'Complete', bar_length = 50)
+        base.print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ' since ' + date_string + ':', suffix = 'Complete', bar_length = 50)
 
         if pages > 1:
             for page in range(2, pages+1):
             # for page in range(2, 3):
-                print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ' since ' + date_string + ':', suffix = 'Complete', bar_length = 50)
+                base.print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ' since ' + date_string + ':', suffix = 'Complete', bar_length = 50)
 
                 options.update({'page': page})
-                data = api_get("articles", options)
+                data = base.api_request("articles", options)
                 pmids = pmids + [article['pmid'] for article in data['articles']]
     else:
         pmids = []
@@ -259,14 +207,14 @@ def aggregate_article_info(gene_info, all_genes):
 
         for pmid in values['pmids']:
             current += 1
-            print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(gene).upper() + ':', suffix = 'Complete', bar_length = 50)
+            base.print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(gene).upper() + ':', suffix = 'Complete', bar_length = 50)
 
             if pmid in article_info:
                 data = article_info[pmid]
                 process_article = False
             else:
                 # Get article_info for each PMID
-                data = api_get("article_info", {'pmid': pmid})
+                data = base.api_request("article_info", {'pmid': pmid})
                 # If request fails, it already prints to stdout that the PMID
                 # is getting skipped, so we can just continue to next PMID
                 if not data:
@@ -435,18 +383,18 @@ def main(args):
             if STOP_AFTER and genes_with_articles > STOP_AFTER:
                 break
             gene_input = line.strip()
-            gene_data = api_get("suggestions", {'gene': gene_input})
+            gene_data = base.api_request("suggestions", {'gene': gene_input})
             if len(gene_data) > 0:
                 canonical_gene = gene_data[0]['canonical']
             else:
                 print "No suggestions found for " + gene_input
                 continue
 
-            begin_count = api_get("counts", filtered_params(canonical_gene, BEGIN))
+            begin_count = base.api_request("counts", filtered_params(canonical_gene, BEGIN))
             if END == None:
                 end_count = {'article_count': 0}
             else:
-                end_count = api_get("counts", filtered_params(canonical_gene, END))
+                end_count = base.api_request("counts", filtered_params(canonical_gene, END))
 
             period_count = begin_count["article_count"] - end_count["article_count"]
 
@@ -455,7 +403,7 @@ def main(args):
                 genes_with_articles += 1
 
                 if ONLY_VARIANTS:
-                    variants = api_get("variants", filtered_params(canonical_gene, BEGIN))
+                    variants = base.api_request("variants", filtered_params(canonical_gene, BEGIN))
                     print "Found " + str(variants["variant_count"]) + " variants"
 
                 if (not ONLY_VARIANTS) or variants["variant_count"] > 0:
@@ -479,7 +427,7 @@ def main(args):
 
         for pmid, article in article_info.items():
             current += 1
-            print_progress(current, total, prefix = 'Calculating scores for articles', suffix = 'Complete', bar_length = 50)
+            base.print_progress(current, total, prefix = 'Calculating scores for articles', suffix = 'Complete', bar_length = 50)
             if skip_article(article, all_genes):
                 continue
 
@@ -505,7 +453,7 @@ def main(args):
             if skip_article(article, all_genes):
                 continue
 
-            url = re.sub(r'([&\?])gene=[^&]+', r'\1gene=' + encode(article["matched_genes"][0]), article["url"])
+            url = re.sub(r'([&\?])gene=[^&]+', r'\1gene=' + base.encode(article["matched_genes"][0]), article["url"])
             pmid_diseases = []
             pmid_phenotypes = []
             pmid_genes = []
@@ -544,7 +492,7 @@ def main(args):
     with codecs.open(diseases_file_path, 'wb', 'utf-8') as output_file:
         output_file.write(",".join(["Disease", "Link", "PMIDs", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Other Diseases", "Phenotypes", "Therapies"]) + "\n")
         for disease, info in disease_info.items():
-            url = "https://mastermind.genomenon.com/detail?gene=" + encode(next(iter(info["matched_genes"]))) + "&disease=" + encode(disease)
+            url = "https://mastermind.genomenon.com/detail?gene=" + base.encode(next(iter(info["matched_genes"]))) + "&disease=" + base.encode(disease)
             output_file.write(",".join([pipe_delimited_field(field) for field in [[disease], [url], info["pmids"], info["matched_genes"], info["other_genes"], info["matched_gene_variants"], info["other_gene_variants"], info["diseases"], info["phenotypes"], info["therapies"]]]) + "\n")
 
     print('-'*100)
@@ -555,7 +503,7 @@ def main(args):
     with codecs.open(phenotypes_file_path, 'wb', 'utf-8') as output_file:
         output_file.write(",".join(["Phenotype", "Link", "PMIDs", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Other Phenotypes", "Therapies"]) + "\n")
         for phenotype, info in phenotype_info.items():
-            url = "https://mastermind.genomenon.com/detail?gene=" + encode(next(iter(info["matched_genes"]))) + "&hpo=" + encode(info["id"])
+            url = "https://mastermind.genomenon.com/detail?gene=" + base.encode(next(iter(info["matched_genes"]))) + "&hpo=" + base.encode(info["id"])
             output_file.write(",".join([pipe_delimited_field(field) for field in [[phenotype], [url], info["pmids"], info["matched_genes"], info["other_genes"], info["matched_gene_variants"], info["other_gene_variants"], info["diseases"], info["phenotypes"], info["therapies"]]]) + "\n")
 
     print('-'*100)
@@ -566,7 +514,7 @@ def main(args):
     with codecs.open(therapies_file_path, 'wb', 'utf-8') as output_file:
         output_file.write(",".join(["Therapy", "Link", "PMIDs", "Matched Genes", "Other Genes", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes", "Other Therapies"]) + "\n")
         for therapy, info in therapy_info.items():
-            url = "https://mastermind.genomenon.com/detail?gene=" + encode(next(iter(info["matched_genes"]))) + "&unii=" + encode(info["id"])
+            url = "https://mastermind.genomenon.com/detail?gene=" + base.encode(next(iter(info["matched_genes"]))) + "&unii=" + base.encode(info["id"])
             output_file.write(",".join([pipe_delimited_field(field) for field in [[therapy], [url], info["pmids"], info["matched_genes"], info["other_genes"], info["matched_gene_variants"], info["other_gene_variants"], info["diseases"], info["phenotypes"], info["therapies"]]]) + "\n")
 
     print('-'*100)
@@ -577,7 +525,7 @@ def main(args):
     with codecs.open(genes_file_path, 'wb', 'utf-8') as output_file:
         output_file.write(",".join(["Gene", "Link", "PMIDs", "Matched Genes", "Other Genes", "Gene Variants", "Matched Gene Variants", "Other Gene Variants", "Diseases", "Phenotypes", "Therapies"]) + "\n")
         for gene, info in gene_info.items():
-            url = "https://mastermind.genomenon.com/detail?gene=" + encode(gene)
+            url = "https://mastermind.genomenon.com/detail?gene=" + base.encode(gene)
             gene_diseases = [gene_disease for gene_disease in info["diseases"].keys()]
             gene_phenotypes = [gene_phenotype for gene_phenotype in info["phenotypes"].keys()]
             gene_therapies = [gene_therapy for gene_therapy in info["therapies"].keys()]

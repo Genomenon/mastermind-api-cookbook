@@ -24,12 +24,8 @@ it already exists):
 
 import sys
 import re
-import urllib
-import requests
 
-URL = "https://mastermind.genomenon.com/api/v2/"
-# Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
-API_TOKEN = "INSERT API TOKEN HERE"
+import base
 
 GRCH37_ACCESSION_NUMBERS = {
         '1': 'NC_000001.10',
@@ -58,43 +54,17 @@ GRCH37_ACCESSION_NUMBERS = {
         'Y': 'NC_000024.9'
         }
 
-def api_get(endpoint, options):
-    params = options.copy()
-    params.update({'api_token': API_TOKEN})
-
-    # print("Querying API: ", endpoint, options)
-    response = requests.get(url=URL+endpoint, params=params)
-
-    return json_or_print_error(response)
-
-def json_or_print_error(response):
-    if response.status_code == requests.codes.ok:
-        return response.json()
-    elif response.status_code == requests.codes.not_found:
-        return {'article_count': 0}
-    else:
-        print(response.status_code)
-        print(response.text)
-        print(response)
-        sys.exit(0)
-
-def encode(str):
-    if sys.version_info[0] < 3:
-        return urllib.quote_plus(str)
-    else:
-        return urllib.parse.quote_plus(str)
-
 def generate_lines(variant, canonical_disease):
     lines = []
 
-    variant_data = api_get("suggestions", {'variant': variant})
+    variant_data = base.api_request("suggestions", {'variant': variant})
 
     if len(variant_data) == 0:
         sys.stderr.write("Variant " + variant + " not found. Skipping.\n")
         sys.stderr.flush()
         return []
 
-    encoded_variant = encode(variant_data[0]['matched'])
+    encoded_variant = base.encode(variant_data[0]['matched'])
 
     for match in variant_data:
         new_line = []
@@ -106,14 +76,14 @@ def generate_lines(variant, canonical_disease):
         new_line.append(canonical_variant)
         new_line.append(match['url'])
 
-        variant_disease_count_data = api_get("counts", {'variant': canonical_variant, 'disease': canonical_disease})
+        variant_disease_count_data = base.api_request("counts", {'variant': canonical_variant, 'disease': canonical_disease})
         new_line.append(str(variant_disease_count_data['article_count']))
 
-        variant_count_data = api_get("counts", {'variant': canonical_variant})
+        variant_count_data = base.api_request("counts", {'variant': canonical_variant})
         new_line.append(str(variant_count_data['article_count']))
 
         variant_diseases_with_counts = []
-        variant_disease_data = api_get("diseases", {'variant': canonical_variant})
+        variant_disease_data = base.api_request("diseases", {'variant': canonical_variant})
 
         if 'diseases' in variant_disease_data:
             for disease in variant_disease_data['diseases']:
@@ -121,16 +91,16 @@ def generate_lines(variant, canonical_disease):
 
         new_line.append('"' + '|'.join(variant_diseases_with_counts) + '"')
 
-        gene_count_data = api_get("counts", {'gene': canonical_gene})
+        gene_count_data = base.api_request("counts", {'gene': canonical_gene})
         new_line.append(gene_count_data['url'])
 
-        gene_disease_count_data = api_get("counts", {'gene': canonical_gene, 'disease': canonical_disease})
+        gene_disease_count_data = base.api_request("counts", {'gene': canonical_gene, 'disease': canonical_disease})
         new_line.append(str(gene_disease_count_data['article_count']))
 
         new_line.append(str(gene_count_data['article_count']))
 
         gene_diseases_with_counts = []
-        gene_disease_data = api_get("diseases", {'gene': canonical_gene})
+        gene_disease_data = base.api_request("diseases", {'gene': canonical_gene})
 
         if 'diseases' in gene_disease_data:
             for disease in gene_disease_data['diseases']:
@@ -147,9 +117,9 @@ def main(args):
     disease = args[2]
     output = []
 
-    disease_data = api_get("suggestions", {'disease': disease})
+    disease_data = base.api_request("suggestions", {'disease': disease})
     canonical_disease = disease_data[0]['canonical']
-    encoded_disease = encode(canonical_disease)
+    encoded_disease = base.encode(canonical_disease)
 
     output.append(["SYMBOL", "Variant", "MM Code", "MM Variant Link", "Variant " + "\"" + re.sub(r"\"", "\"\"", canonical_disease) + "\"" + " Articles in MM (Article Count", "Variant Article Count in MM", "Variant Diseases in MM (Article Count)", "MM Gene Link", "Gene " + canonical_disease + " Articles in MM (Article Count)", "Gene Article Count in MM", "Gene Diseases in MM (Article Count)"])
 
