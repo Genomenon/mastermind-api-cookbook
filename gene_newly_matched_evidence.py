@@ -533,7 +533,7 @@ def main(args):
             if INCLUDE_SCORE:
                 fields += [[str(round(article["total_score"], 1))]]
             if INCLUDE_SUBSCORES:
-                fields += [[str(round(article['scores'][score_name], 1))] for score_name in score_columns]
+                fields += [[str(round(article['scores'][score_name], 2))] for score_name in score_columns]
 
             output_file.write(",".join([pipe_delimited_field(field) for field in fields]) + "\n")
 
