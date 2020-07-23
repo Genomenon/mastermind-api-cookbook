@@ -34,6 +34,7 @@ import json
 import requests
 import urllib
 from collections import defaultdict
+import codecs
 
 URL = "https://mastermind.genomenon.com/api/v2/"
 # Find your API token by logging in, visiting https://mastermind.genomenon.com/api, and clicking the link that says "Click here to fetch your API token".
@@ -172,7 +173,7 @@ def gene_pair_search(gene_a=None, gene_b=None, gene_a_pmids=None, gene_b_pmids=N
     pmids_by_gene_pair = {}
     pmids_by_gene_pair[gene_a + '-' + gene_b] = {'pmids': intersection}
 
-    return pmids_by_gene_pair
+    return gene_a, gene_b, pmids_by_gene_pair
 
 def gene_search(gene_a=None):
     if gene_a is None:
@@ -187,9 +188,10 @@ def gene_search(gene_a=None):
     gene_a_pmids = fusion_pmids({'gene': gene_a})
 
     for gene_b in genes:
-        pmids_by_gene_pair.update(gene_pair_search(gene_a, gene_b, gene_a_pmids))
+        _a, _b, results = gene_pair_search(gene_a, gene_b, gene_a_pmids)
+        pmids_by_gene_pair.update(results)
 
-    return pmids_by_gene_pair
+    return gene_a, pmids_by_gene_pair
 
 def disease_search(disease=None):
     if disease is None:
@@ -212,9 +214,10 @@ def disease_search(disease=None):
         i = genes.index(gene_a)
         for l in range(i+1, total_genes):
             gene_b = genes[l]
-            pmids_by_gene_pair.update(gene_pair_search(gene_a, gene_b, gene_pmids[gene_a], gene_pmids[gene_b]))
+            _a, _b, results = gene_pair_search(gene_a, gene_b, gene_pmids[gene_a], gene_pmids[gene_b])
+            pmids_by_gene_pair.update(results)
 
-    return pmids_by_gene_pair
+    return disease, pmids_by_gene_pair
 
 def aggregate_article_info(pmids_by_gene_pair):
     pmid_info = {}
@@ -257,33 +260,37 @@ def main():
     output = output_mode()
     choose_sensitivity()
     if mode == 1:
-        info = gene_pair_search()
+        gene_a, gene_b, info = gene_pair_search()
+        filename_prefix = gene_a + "-" + gene_b
     elif mode == 2:
-        info = gene_search()
+        gene, info = gene_search()
+        filename_prefix = gene
     else:
-        info = disease_search()
+        disease, info = disease_search()
+        filename_prefix = disease
 
     if output == 1:
         info = aggregate_article_info(info)
 
-    print('-'*100)
-    for gene_pair, data in info.items():
-        if len(data['pmids']) == 0:
-            print("No articles found with " + str(gene_pair).upper())
-        else:
-            print("Found the following associations for " + str(gene_pair).upper() + ":")
+    output_filename = "-".join([filename_prefix, "gene-fusions", str(_sensitivity), "article-sensitivity"]) + ".txt"
+    with codecs.open(output_filename, 'wb', 'utf-8') as output_file:
+        for gene_pair, data in info.items():
+            if len(data['pmids']) == 0:
+                output_file.write("No articles found with " + str(gene_pair).upper() + "\n")
+            else:
+                output_file.write("Found the following associations for " + str(gene_pair).upper() + ":\n")
 
-            print("PMIDs:")
-            print("\t" + ', '.join(data['pmids']))
+                output_file.write("PMIDs:\n")
+                output_file.write("\t" + ', '.join(data['pmids']) + "\n")
 
-            if output == 1:
-                print("\tVariants with supporting PMIDs:")
-                for values in sorted(data['variants'].items(), key=lambda item: len(item[1]), reverse=True):
-                    print("\t\t" + str(values[0]) + ": " + ', '.join(values[1]))
+                if output == 1:
+                    output_file.write("\tVariants with supporting PMIDs:\n")
+                    for values in sorted(data['variants'].items(), key=lambda item: len(item[1]), reverse=True):
+                        output_file.write("\t\t" + str(values[0]) + ": " + ', '.join(values[1]) + "\n")
 
-                print("\tDiseases with supporting PMIDs:")
-                for values in sorted(data['diseases'].items(), key=lambda item: len(item[1]), reverse=True):
-                    print("\t\t" + str(values[0]).title() + ": " + ', '.join(values[1]))
+                    output_file.write("\tDiseases with supporting PMIDs:\n")
+                    for values in sorted(data['diseases'].items(), key=lambda item: len(item[1]), reverse=True):
+                        output_file.write("\t\t" + str(values[0]).title() + ": " + ', '.join(values[1]) + "\n")
 
 if __name__ == "__main__":
     main()
