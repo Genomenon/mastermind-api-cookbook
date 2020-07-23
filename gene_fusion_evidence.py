@@ -94,11 +94,11 @@ def get_mode(options):
     return mode
 
 def search_mode():
-    print "Search by:"
+    print("Search by:")
     return get_mode(["Known gene pair (both genes known)", "Known gene partner (one gene known)", "Known disease"])
 
 def output_mode():
-    print "Compile and output:"
+    print("Compile and output:")
     return get_mode(["Variants, diseases, and PMIDs", "PMIDs only"])
 
 def choose_sensitivity():
@@ -115,7 +115,7 @@ def choose_sensitivity():
             except:
                 sensitivity_entered = None
                 _sensitivity = DEFAULT_MAX_ARTICLES
-                print "Please enter a valid value or leave blank."
+                print("Please enter a valid value or leave blank.")
 
 def choose_suggestion(suggestion_type, prompt):
     value = None
@@ -269,7 +269,7 @@ def main():
     print('-'*100)
     for gene_pair, data in info.items():
         if len(data['pmids']) == 0:
-            print ("No articles found with " + str(gene_pair).upper())
+            print("No articles found with " + str(gene_pair).upper())
         else:
             print("Found the following associations for " + str(gene_pair).upper() + ":")
 
