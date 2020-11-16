@@ -81,7 +81,10 @@ class MasterMind:
         """Given a VCF input use the mastermind apis to annotate the vcf.
 
         There are Multiple steps for annotating a Mastermind VCF
-        1. Submit a job to genomenon
+        1. Create Job 
+        2. Upload the VCF
+        3. Check whether successful 
+        4. Download the result
         """
         # check exists
         if not os.path.exists(vcf_path):
@@ -153,7 +156,7 @@ class MasterMind:
         self.curr_job = JobResponse(**response.json())
 
 
-def fix_url(part):
+def fix_url(part: str):
     if part[0] == "/":
         # Remove initial / if exists
         part = part[1:]

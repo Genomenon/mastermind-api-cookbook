@@ -17,6 +17,7 @@ def print_help() -> None:
 def annotate_with_evidence(token, assembly, mm_api_url, vcf, out_vcf):
     if not all([token, vcf, out_vcf]):
         print_help()
+        return
     mmapi = MasterMind(token=token, mm_api_url=mm_api_url, assembly=assembly)
     mmapi.vcf_annotate(vcf_path=vcf, out_vcf_path=out_vcf, assembly=assembly)
 
