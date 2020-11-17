@@ -43,14 +43,16 @@ API_TOKEN = "INSERT API TOKEN HERE"
 DEFAULT_MAX_ARTICLES = 1000
 _sensitivity = DEFAULT_MAX_ARTICLES
 
+
 def api_get(endpoint, options):
     params = options.copy()
-    params.update({'api_token': API_TOKEN})
+    params.update({"api_token": API_TOKEN})
 
     # print("Querying API: ", endpoint, options)
-    response = requests.get(url=URL+endpoint, params=params)
+    response = requests.get(url=URL + endpoint, params=params)
 
     return json_or_print_error(response)
+
 
 def json_or_print_error(response):
     if response.status_code == requests.codes.ok:
@@ -60,31 +62,38 @@ def json_or_print_error(response):
         print(response.text)
         sys.exit(0)
 
+
 def encode(str):
     if sys.version_info[0] < 3:
         return urllib.quote_plus(str)
     else:
         return urllib.parse.quote_plus(str)
 
-def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
+
+def print_progress(iteration, total, prefix="", suffix="", decimals=1, bar_length=100):
     str_format = "{0:." + str(decimals) + "f}"
     percents = str_format.format(100 * (iteration / float(total)))
     filled_length = int(round(bar_length * iteration / float(total)))
-    bar = 'M' * filled_length + '-' * (bar_length - filled_length)
+    bar = "M" * filled_length + "-" * (bar_length - filled_length)
 
-    sys.stdout.write('\r%s |%s| %s%s %s' % (prefix, bar, percents, '%', suffix)),
+    sys.stdout.write("\r%s |%s| %s%s %s" % (prefix, bar, percents, "%", suffix)),
 
     if iteration == total:
-        sys.stdout.write('\n')
+        sys.stdout.write("\n")
     sys.stdout.flush()
+
 
 def get_mode(options):
     mode = None
-    options = [str(options.index(o)+1) + ". " + o for o in options]
+    options = [str(options.index(o) + 1) + ". " + o for o in options]
     # Turn number of options into text, e.g.: "1, 2 or 3"
-    valid = ' or '.join( ', '.join([str(i) for i in range(1, len(options)+1)]).rsplit(', ', 1))
+    valid = " or ".join(
+        ", ".join([str(i) for i in range(1, len(options) + 1)]).rsplit(", ", 1)
+    )
     while mode is None:
-        entered = raw_input("\t" + '\n\t'.join(options) + "\n(Type " + valid + " and hit Enter): ")
+        entered = raw_input(
+            "\t" + "\n\t".join(options) + "\n(Type " + valid + " and hit Enter): "
+        )
         try:
             mode = int(entered)
             if mode > len(options):
@@ -94,20 +103,39 @@ def get_mode(options):
             print("Please enter " + valid)
     return mode
 
+
 def search_mode():
     print("Search by:")
-    return get_mode(["Known gene pair (both genes known)", "Known gene partner (one gene known)", "Known disease"])
+    return get_mode(
+        [
+            "Known gene pair (both genes known)",
+            "Known gene partner (one gene known)",
+            "Known disease",
+        ]
+    )
+
 
 def output_mode():
     print("Compile and output:")
     return get_mode(["Variants, diseases, and PMIDs", "PMIDs only"])
 
+
 def choose_sensitivity():
     global _sensitivity
-    print("Choose maximum number of articles to fetch for each gene. The more articles, the more complete the results, but the longer the program will take to run.")
+    print(
+        "Choose maximum number of articles to fetch for each gene. The more articles, the more complete the results, but the longer the program will take to run."
+    )
     sensitivity_entered = None
     while sensitivity_entered is None:
-        sensitivity_entered = re.sub('[,\.]', '', raw_input("Enter sensitivity (between 1 and 10,000), or leave blank for default [" + str(DEFAULT_MAX_ARTICLES) + "], and press Enter: "))
+        sensitivity_entered = re.sub(
+            "[,\.]",
+            "",
+            raw_input(
+                "Enter sensitivity (between 1 and 10,000), or leave blank for default ["
+                + str(DEFAULT_MAX_ARTICLES)
+                + "], and press Enter: "
+            ),
+        )
         if sensitivity_entered:
             try:
                 _sensitivity = int(sensitivity_entered)
@@ -118,6 +146,7 @@ def choose_sensitivity():
                 _sensitivity = DEFAULT_MAX_ARTICLES
                 print("Please enter a valid value or leave blank.")
 
+
 def choose_suggestion(suggestion_type, prompt):
     value = None
     while value is None:
@@ -126,35 +155,64 @@ def choose_suggestion(suggestion_type, prompt):
         options[suggestion_type] = suggestion_input
         suggestions = api_get("suggestions", options)
         if len(suggestions) == 0:
-            print(suggestion_type.title() + " could not be found for \"" + options[suggestion_type] + "\"")
-            print("Please make sure you've properly typed it or try searching by another nomenclature.")
+            print(
+                suggestion_type.title()
+                + ' could not be found for "'
+                + options[suggestion_type]
+                + '"'
+            )
+            print(
+                "Please make sure you've properly typed it or try searching by another nomenclature."
+            )
         else:
-            value = encode(suggestions[0]['canonical'])
+            value = encode(suggestions[0]["canonical"])
 
     return value
 
+
 def fusion_pmids(options):
     params = options.copy()
-    params.update({'categories[]': ['fusion', 'breakpoint']})
+    params.update({"categories[]": ["fusion", "breakpoint"]})
 
     data = api_get("articles", params)
-    pmids = [article['pmid'] for article in data['articles']]
+    pmids = [article["pmid"] for article in data["articles"]]
 
-    articles = min(int(data['article_count']), _sensitivity)
-    pages = min(int(data['pages']), _sensitivity/5)
+    articles = min(int(data["article_count"]), _sensitivity)
+    pages = min(int(data["pages"]), _sensitivity / 5)
 
-    print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ':', suffix = 'Complete', bar_length = 50)
+    print_progress(
+        1,
+        pages,
+        prefix="Getting "
+        + str(articles)
+        + " articles for "
+        + str(options["gene"]).upper()
+        + ":",
+        suffix="Complete",
+        bar_length=50,
+    )
 
     if pages > 1:
-        for page in range(2, pages+1):
-        # for page in range(2, 3):
-            print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['gene']).upper() + ':', suffix = 'Complete', bar_length = 50)
+        for page in range(2, pages + 1):
+            # for page in range(2, 3):
+            print_progress(
+                page,
+                pages,
+                prefix="Getting "
+                + str(articles)
+                + " articles for "
+                + str(options["gene"]).upper()
+                + ":",
+                suffix="Complete",
+                bar_length=50,
+            )
 
-            params.update({'page': page})
+            params.update({"page": page})
             data = api_get("articles", params)
-            pmids = pmids + [article['pmid'] for article in data['articles']]
+            pmids = pmids + [article["pmid"] for article in data["articles"]]
 
     return pmids
+
 
 def gene_pair_search(gene_a=None, gene_b=None, gene_a_pmids=None, gene_b_pmids=None):
     if gene_a is None:
@@ -164,28 +222,38 @@ def gene_pair_search(gene_a=None, gene_b=None, gene_a_pmids=None, gene_b_pmids=N
         gene_b = choose_suggestion("gene", "Enter gene B: ")
 
     if gene_a_pmids is None:
-        gene_a_pmids = fusion_pmids({'gene': gene_a})
+        gene_a_pmids = fusion_pmids({"gene": gene_a})
     if gene_b_pmids is None:
-        gene_b_pmids = fusion_pmids({'gene': gene_b})
+        gene_b_pmids = fusion_pmids({"gene": gene_b})
 
-    intersection = list(set(gene_a_pmids)&set(gene_b_pmids))
+    intersection = list(set(gene_a_pmids) & set(gene_b_pmids))
 
     pmids_by_gene_pair = {}
-    pmids_by_gene_pair[gene_a + '-' + gene_b] = {'pmids': intersection}
+    pmids_by_gene_pair[gene_a + "-" + gene_b] = {"pmids": intersection}
 
     return gene_a, gene_b, pmids_by_gene_pair
+
 
 def gene_search(gene_a=None):
     if gene_a is None:
         gene_a = choose_suggestion("gene", "Enter gene: ")
 
-    data = api_get("genes", {'gene': gene_a})
-    genes = [gene['symbol'] for gene in data['genes'] if str(gene['symbol']).upper() != str(gene_a).upper()]
+    data = api_get("genes", {"gene": gene_a})
+    genes = [
+        gene["symbol"]
+        for gene in data["genes"]
+        if str(gene["symbol"]).upper() != str(gene_a).upper()
+    ]
 
-    print("Found gene partner candidates for " + str(gene_a).upper() + ": " + ', '.join(genes))
+    print(
+        "Found gene partner candidates for "
+        + str(gene_a).upper()
+        + ": "
+        + ", ".join(genes)
+    )
 
     pmids_by_gene_pair = {}
-    gene_a_pmids = fusion_pmids({'gene': gene_a})
+    gene_a_pmids = fusion_pmids({"gene": gene_a})
 
     for gene_b in genes:
         _a, _b, results = gene_pair_search(gene_a, gene_b, gene_a_pmids)
@@ -193,31 +261,40 @@ def gene_search(gene_a=None):
 
     return gene_a, pmids_by_gene_pair
 
+
 def disease_search(disease=None):
     if disease is None:
         disease = choose_suggestion("disease", "Enter disease: ")
 
-    data = api_get("genes", {'disease': disease})
-    genes = [gene['symbol'] for gene in data['genes']]
+    data = api_get("genes", {"disease": disease})
+    genes = [gene["symbol"] for gene in data["genes"]]
     total_genes = len(genes)
 
-    print("Found gene partner candidates for " + str(disease).title() + ": " + ', '.join(genes))
+    print(
+        "Found gene partner candidates for "
+        + str(disease).title()
+        + ": "
+        + ", ".join(genes)
+    )
 
     gene_pmids = {}
     for gene in genes:
-        gene_pmids[gene] = fusion_pmids({'gene': gene})
+        gene_pmids[gene] = fusion_pmids({"gene": gene})
 
     pmids_by_gene_pair = defaultdict(lambda: {})
 
     # Iterate over each unique pair
     for gene_a in genes:
         i = genes.index(gene_a)
-        for l in range(i+1, total_genes):
+        for l in range(i + 1, total_genes):
             gene_b = genes[l]
-            _a, _b, results = gene_pair_search(gene_a, gene_b, gene_pmids[gene_a], gene_pmids[gene_b])
+            _a, _b, results = gene_pair_search(
+                gene_a, gene_b, gene_pmids[gene_a], gene_pmids[gene_b]
+            )
             pmids_by_gene_pair.update(results)
 
     return disease, pmids_by_gene_pair
+
 
 def aggregate_article_info(pmids_by_gene_pair):
     pmid_info = {}
@@ -227,32 +304,41 @@ def aggregate_article_info(pmids_by_gene_pair):
         variants_by_pmids = defaultdict(lambda: [])
 
         current = 0
-        total = len(values['pmids'])
+        total = len(values["pmids"])
 
-        for pmid in values['pmids']:
+        for pmid in values["pmids"]:
             current += 1
-            print_progress(current, total, prefix = 'Inspecting PMID info for ' + str(gene_pair).upper() + ':', suffix = 'Complete', bar_length = 50)
+            print_progress(
+                current,
+                total,
+                prefix="Inspecting PMID info for " + str(gene_pair).upper() + ":",
+                suffix="Complete",
+                bar_length=50,
+            )
 
             if pmid in pmid_info:
                 data = pmid_info[pmid]
             else:
                 # Get article_info for each PMID
-                data = api_get("article_info", {'pmid': pmid})
+                data = api_get("article_info", {"pmid": pmid})
                 pmid_info[pmid] = data
 
-            if 'diseases' in data:
-                for disease in data['diseases']:
-                    diseases_by_pmids[disease['key']].append(pmid)
+            if "diseases" in data:
+                for disease in data["diseases"]:
+                    diseases_by_pmids[disease["key"]].append(pmid)
 
-            for gene in data['genes']:
-                if 'variants' in gene:
-                    for variant in gene['variants']:
-                        variants_by_pmids[gene['symbol'] + ':' + variant['key']].append(pmid)
+            for gene in data["genes"]:
+                if "variants" in gene:
+                    for variant in gene["variants"]:
+                        variants_by_pmids[gene["symbol"] + ":" + variant["key"]].append(
+                            pmid
+                        )
 
-        pmids_by_gene_pair[gene_pair]['diseases'] = diseases_by_pmids
-        pmids_by_gene_pair[gene_pair]['variants'] = variants_by_pmids
+        pmids_by_gene_pair[gene_pair]["diseases"] = diseases_by_pmids
+        pmids_by_gene_pair[gene_pair]["variants"] = variants_by_pmids
 
     return pmids_by_gene_pair
+
 
 def main():
     print("Welcome to the Gene Fusion Evidence program powered by Mastermind.")
@@ -272,25 +358,53 @@ def main():
     if output == 1:
         info = aggregate_article_info(info)
 
-    output_filename = "-".join([filename_prefix, "gene-fusions", str(_sensitivity), "article-sensitivity"]) + ".txt"
-    with codecs.open(output_filename, 'wb', 'utf-8') as output_file:
+    output_filename = (
+        "-".join(
+            [filename_prefix, "gene-fusions", str(_sensitivity), "article-sensitivity"]
+        )
+        + ".txt"
+    )
+    with codecs.open(output_filename, "wb", "utf-8") as output_file:
         for gene_pair, data in info.items():
-            if len(data['pmids']) == 0:
-                output_file.write("No articles found with " + str(gene_pair).upper() + "\n")
+            if len(data["pmids"]) == 0:
+                output_file.write(
+                    "No articles found with " + str(gene_pair).upper() + "\n"
+                )
             else:
-                output_file.write("Found the following associations for " + str(gene_pair).upper() + ":\n")
+                output_file.write(
+                    "Found the following associations for "
+                    + str(gene_pair).upper()
+                    + ":\n"
+                )
 
                 output_file.write("PMIDs:\n")
-                output_file.write("\t" + ', '.join(data['pmids']) + "\n")
+                output_file.write("\t" + ", ".join(data["pmids"]) + "\n")
 
                 if output == 1:
                     output_file.write("\tVariants with supporting PMIDs:\n")
-                    for values in sorted(data['variants'].items(), key=lambda item: len(item[1]), reverse=True):
-                        output_file.write("\t\t" + str(values[0]) + ": " + ', '.join(values[1]) + "\n")
+                    for values in sorted(
+                        data["variants"].items(),
+                        key=lambda item: len(item[1]),
+                        reverse=True,
+                    ):
+                        output_file.write(
+                            "\t\t" + str(values[0]) + ": " + ", ".join(values[1]) + "\n"
+                        )
 
                     output_file.write("\tDiseases with supporting PMIDs:\n")
-                    for values in sorted(data['diseases'].items(), key=lambda item: len(item[1]), reverse=True):
-                        output_file.write("\t\t" + str(values[0]).title() + ": " + ', '.join(values[1]) + "\n")
+                    for values in sorted(
+                        data["diseases"].items(),
+                        key=lambda item: len(item[1]),
+                        reverse=True,
+                    ):
+                        output_file.write(
+                            "\t\t"
+                            + str(values[0]).title()
+                            + ": "
+                            + ", ".join(values[1])
+                            + "\n"
+                        )
+
 
 if __name__ == "__main__":
     main()

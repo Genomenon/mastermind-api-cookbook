@@ -2,3 +2,4 @@ click
 pytest
 pydantic
 requests
+pylint

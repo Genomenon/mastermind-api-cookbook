@@ -1,3 +1,4 @@
+# pylint: disable=E0611, R0903
 """
 Get credentials for mastermind API
 """
@@ -16,8 +17,9 @@ def get_creds(
 ) -> CredSchema:
     if not os.path.exists(yaml_file):
         raise ValueError(
-            "Path to yaml_file doesn't exist: %s. Please supply one with the token inside",
-            yaml_file,
+            "Path to yaml_file doesn't exist: {}. Please supply one with the token inside".format(
+                yaml_file
+            )
         )
 
     parser = YAML(typ="safe")

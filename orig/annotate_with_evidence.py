@@ -36,45 +36,49 @@ URL = "https://mastermind.genomenon.com/api/v2/"
 API_TOKEN = "INSERT API TOKEN HERE"
 ASSEMBLY = "grch37"
 
+
 def api_request(endpoint, options, request_type="GET", json_request=True):
     params = options.copy()
-    params.update({'api_token': API_TOKEN})
+    params.update({"api_token": API_TOKEN})
 
     # print("Querying API: ", endpoint, options)
-    response = requests.request(request_type, url=URL+endpoint, params=params)
+    response = requests.request(request_type, url=URL + endpoint, params=params)
 
     if json_request:
         return json_or_print_error(response)
     else:
         return response
 
+
 def json_or_print_error(response):
     if response.status_code == requests.codes.ok:
         return response.json()
     else:
-        print(response.status_code)
-        print(response.text)
+        print (response.status_code)
+        print (response.text)
         sys.exit(0)
+
 
 def wait_for_success(job_url):
     message = "Waiting for processing success"
 
     response = api_request(job_url, {})
-    state = response['state']
+    state = response["state"]
 
     i = 3
-    sys.stdout.write('\r' + message)
+    sys.stdout.write("\r" + message)
     sys.stdout.flush()
     while state == "created" or state == "started":
-        sys.stdout.write('\r' + message + i*'.')
+        sys.stdout.write("\r" + message + i * ".")
         sys.stdout.flush()
         time.sleep(5)
         i += 1
         response = api_request(job_url, {})
-        state = response['state']
+        state = response["state"]
 
     sys.stdout.write("\n")
     return response, state
+
 
 def main(args):
     input_vcf_path = args[1]
@@ -90,38 +94,51 @@ def main(args):
     # 1. Create new file annotation job
     if job_id == None:
         print "Creating file annotation job for file: " + input_vcf_name
-        response = api_request('file_annotations/counts', {'assembly': ASSEMBLY, 'filename': input_vcf_name}, 'POST')
+        response = api_request(
+            "file_annotations/counts",
+            {"assembly": ASSEMBLY, "filename": input_vcf_name},
+            "POST",
+        )
 
-    job_id = response['job_id']
-    job_url = response['job_url']
-    upload_url = response['upload_url']
-    state = response['state']
+    job_id = response["job_id"]
+    job_url = response["job_url"]
+    upload_url = response["upload_url"]
+    state = response["state"]
     print "Job ID: " + job_id
 
     if state == "created":
         # 2. Upload VCF or annotated VCF file for annotation
         print "Uploading file..."
-        with open(input_vcf_path, 'rb') as f:
-            requests.put(upload_url, data=f, headers={'Content-Type': 'application/octet-stream'})
+        with open(input_vcf_path, "rb") as f:
+            requests.put(
+                upload_url, data=f, headers={"Content-Type": "application/octet-stream"}
+            )
 
     if state == "created" or state == "started":
         # 3. Periodically check status until job is finished
         response, state = wait_for_success("file_annotations/counts/" + job_id)
 
     if state == "succeeded":
-        print "Successfully annotated. " + str(response['annotated']) + " out of " + str(response['records']) + " have annotations."
+        print "Successfully annotated. " + str(
+            response["annotated"]
+        ) + " out of " + str(response["records"]) + " have annotations."
     else:
         print "There was an error processing the file for Job ID " + job_id
         sys.exit(1)
 
-    download_url = response['download_url']
+    download_url = response["download_url"]
 
     # 4. Download annotated file
-    output_file_path = re.sub(r"\.vcf(\.gz)?$", ".annotated-" + job_id + ".vcf.gz", input_vcf_path)
+    output_file_path = re.sub(
+        r"\.vcf(\.gz)?$", ".annotated-" + job_id + ".vcf.gz", input_vcf_path
+    )
     print "Downloading annotated file to " + output_file_path
-    downloaded_file = api_request("file_annotations/counts/" + job_id + "/download", {}, json_request=False)
-    with open(output_file_path, 'wb') as output_file:
+    downloaded_file = api_request(
+        "file_annotations/counts/" + job_id + "/download", {}, json_request=False
+    )
+    with open(output_file_path, "wb") as output_file:
         output_file.write(downloaded_file.content)
+
 
 if __name__ == "__main__":
     main(sys.argv)

@@ -1,0 +1,7 @@
+language: python
+python: "3.8"
+install:
+    - pip install -r requirements.txt
+scripts:
+    - pytest
+    - pylint -j 4 --output-format=colorized  -disable=R,C mastermind
