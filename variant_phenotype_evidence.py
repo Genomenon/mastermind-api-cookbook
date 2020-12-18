@@ -116,6 +116,15 @@ STOP_AFTER = False #5
 # For large data sets, shrink size of associations file by ommitting associations with only one matching PMID
 OMIT_ONE_PMID_MATCHES_FROM_ASSOCIATIONS_FILE = False
 
+# If the variant inputs are known to be properly formatted, skip running them all through the Suggestions endpoint
+SKIP_VARIANT_SUGGESTION_NORMALIZATION = True
+
+# Only look up and analyze articles which have nucleotide-specific citations for the variant;
+# Useful for large variant datasets when higher specificity is desired
+# If setting to True, ensure SKIP_VARIANT_SUGGESTION_NORMALIZATION is set to True,
+# since that step will convert nucleotide-specific variant names to their protein effects.
+ONLY_NUCLEOTIDE_CITATIONS = True
+
 def api_get(endpoint, options, tries=0):
     params = options.copy()
     params.update({'api_token': API_TOKEN})
@@ -135,7 +144,10 @@ def json_or_print_error(response, endpoint, options, tries):
             print("\t" + response.text)
         print("\tRESULTING FROM REQUEST: " + endpoint)
         print("\tWITH PARAMS: " + str(options))
-        if response.status_code in [408, 500]:
+        if response.status_code in [404]:
+            print("SKIPPING DATA FOR ABOVE REQUEST")
+            return
+        elif response.status_code in [408, 500]:
             if tries < 1:
                 print("Time out error, trying again.")
                 return api_get(endpoint, options, tries+1)
@@ -162,10 +174,18 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
         sys.stdout.write('\n')
     sys.stdout.flush()
 
+def variant_dna_format(variant):
+    return re.search(r'c\.\d+', variant) or re.search(r'g\.\d+', variant) or re.search(r'rs\d+', variant) or re.search(r'IVS\d', variant)
+
+def specificity_match(variant_dna_specificity, article):
+    return (not ONLY_NUCLEOTIDE_CITATIONS or not variant_dna_specificity) or ('matched_dna' in article and article['matched_dna'] == True)
+
 def get_articles(options):
     data = api_get("articles", options)
-    if "articles" in data:
-        pmids = [article['pmid'] for article in data['articles']]
+    variant_dna_specificity = 'variant' in options and variant_dna_format(options['variant'])
+
+    if data and "articles" in data:
+        pmids = [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, article)]
 
         articles = int(data['article_count'])
         pages = int(data['pages'])
@@ -173,13 +193,20 @@ def get_articles(options):
         print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
         if pages > 1:
-            for page in range(2, pages+1):
-            # for page in range(2, 3):
-                print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
+            if specificity_match(variant_dna_specificity, data['articles'][-1]):
+                for page in range(2, pages+1):
+                    print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
-                options.update({'page': page})
-                data = api_get("articles", options)
-                pmids = pmids + [article['pmid'] for article in data['articles']]
+                    options.update({'page': page})
+                    data = api_get("articles", options)
+                    pmids = pmids + [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, article)]
+                    if not specificity_match(variant_dna_specificity, data['articles'][-1]):
+                        sys.stdout.write('\n')
+                        sys.stdout.flush()
+                        break;
+            else:
+                sys.stdout.write('\n')
+                sys.stdout.flush()
     else:
         articles = 0
         pmids = []
@@ -310,6 +337,12 @@ def pipe_delimited_field(values):
 def main(args):
     print("Welcome to the Gene New Evidence Alerts program powered by Mastermind.")
 
+    if ONLY_NUCLEOTIDE_CITATIONS and not SKIP_VARIANT_SUGGESTION_NORMALIZATION:
+        print("")
+        print("Misconfiguration: ONLY_NUCLEOTIDE_CITATIONS is set to True, so SKIP_VARIANT_SUGGESTION_NORMALIZATION must also be set to True.")
+        print("Exiting.")
+        sys.exit(0)
+
     variants_filename = args[1]
     phenotypes_filename = args[2]
     variants_with_articles = 0
@@ -337,32 +370,38 @@ def main(args):
             if STOP_AFTER and variants_with_articles > STOP_AFTER:
                 break
             variant_input = line.strip()
-            variant_data = api_get("suggestions", {'variant': variant_input})
-            if len(variant_data) > 0:
-                canonical_variant = variant_data[0]['canonical']
+            if SKIP_VARIANT_SUGGESTION_NORMALIZATION:
+                canonical_variant = variant_input
             else:
-                # Try again with gene suggestion
-                gene_input = variant_input.split(":", 1)
-                gene_data = api_get("suggestions", {'gene': gene_input[0]})
-                if len(gene_data) > 0:
-                    canonical_gene = gene_data[0]['canonical']
-                    variant_data = api_get("suggestions", {'variant': canonical_gene + ':' + gene_input[1]})
-                    if len(variant_data) > 0:
-                        canonical_variant = variant_data[0]['canonical']
-                    else:
-                        print variant_input + " could not be matched to a valid transcript."
-                        continue
+                variant_data = api_get("suggestions", {'variant': variant_input})
+                if len(variant_data) > 0:
+                    canonical_variant = variant_data[0]['canonical']
                 else:
-                    print gene_input[0] + " could not be matched to a valid transcript."
-                    continue
+                    # Try again with gene suggestion
+                    gene_input = variant_input.split(":", 1)
+                    gene_data = api_get("suggestions", {'gene': gene_input[0]})
+                    if len(gene_data) > 0:
+                        canonical_gene = gene_data[0]['canonical']
+                        variant_data = api_get("suggestions", {'variant': canonical_gene + ':' + gene_input[1]})
+                        if len(variant_data) > 0:
+                            canonical_variant = variant_data[0]['canonical']
+                        else:
+                            print variant_input + " could not be matched to a valid transcript."
+                            continue
+                    else:
+                        print gene_input[0] + " could not be matched to a valid transcript."
+                        continue
 
-            count, articles = get_articles({'variant': canonical_variant})
-            variant_info[canonical_variant] = {'pmids': articles}
-
-            if count > 0:
-                variants_with_articles += 1
+            if canonical_variant in variant_info:
+                print "Articles already fetched for " + canonical_variant
             else:
-                print "No articles found for " + canonical_variant + " (" + variant_input + ")."
+                count, articles = get_articles({'variant': canonical_variant})
+                variant_info[canonical_variant] = {'pmids': articles}
+
+                if count > 0:
+                    variants_with_articles += 1
+                else:
+                    print "No articles found for " + canonical_variant + " (" + variant_input + ")."
 
     if variants_with_articles == 0:
         print "Mastermind searched 30 million abstracts and 7 million genomic full-text articles, and no articles cite these variants."
