@@ -115,7 +115,7 @@ def parse(lines, filename):
             print cat + ': ' + str(len(lines))
             output_file_path = re.sub(r"\.vcf(\.gz)?$", "." + cat + ".vcf.gz", filename)
 
-            print "\tSaving annotations to " + output_file_path
+            print("\tSaving annotations to " + output_file_path)
             with gzip.open(output_file_path, 'wb') as output_file:
                 output_file.write(''.join(header_lines))
                 output_file.write(''.join(lines))

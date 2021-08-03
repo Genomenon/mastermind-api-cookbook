@@ -253,11 +253,11 @@ def aggregate_article_info(variant_info, phenotypes):
                 article_info[pmid] = data
 
             if data == None:
-                print "COULDN'T GET INFO FOR ARTICLE. SKIPPING ANALYSIS FOR PMID " + pmid
+                print("COULDN'T GET INFO FOR ARTICLE. SKIPPING ANALYSIS FOR PMID " + pmid)
                 continue
 
             if FILTER_ON_PHENOTYPES and ('hpo_terms' not in data or not has_phenotypes(phenotypes, data['hpo_terms'])):
-                # print "Aritcle PMID " + pmid + " does not contain phenotypes. Skipping."
+                # print("Aritcle PMID " + pmid + " does not contain phenotypes. Skipping.")
                 continue
             else:
                 filtered_article_info[pmid] = data
@@ -361,7 +361,7 @@ def main(args):
         if len(phenotype_data) > 0:
             phenotypes[phenotype_data[0]['name']] = phenotype_data[0]['canonical']
         else:
-            print "\nPhenotype " + phenotype + " could not be found. Skipping."
+            print("\nPhenotype " + phenotype + " could not be found. Skipping.")
         phenotypes_parsed += 1
 
     with open(variants_filename, "r") as lines:
@@ -393,7 +393,7 @@ def main(args):
                         continue
 
             if canonical_variant in variant_info:
-                print "Articles already fetched for " + canonical_variant
+                print("Articles already fetched for " + canonical_variant)
             else:
                 count, articles = get_articles({'variant': canonical_variant})
                 variant_info[canonical_variant] = {'pmids': articles}
@@ -401,10 +401,10 @@ def main(args):
                 if count > 0:
                     variants_with_articles += 1
                 else:
-                    print "No articles found for " + canonical_variant + " (" + variant_input + ")."
+                    print("No articles found for " + canonical_variant + " (" + variant_input + ").")
 
     if variants_with_articles == 0:
-        print "Mastermind searched 30 million abstracts and 7 million genomic full-text articles, and no articles cite these variants."
+        print("Mastermind searched 30 million abstracts and 7 million genomic full-text articles, and no articles cite these variants."
         return
 
     # Aggregate all article info, from which other aggregations will be generated

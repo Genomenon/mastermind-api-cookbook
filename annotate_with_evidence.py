@@ -82,25 +82,25 @@ def main(args):
 
     if len(args) == 3:
         job_id = args[2]
-        print "Continuing job"
+        print("Continuing job")
         response = api_request("file_annotations/counts/" + job_id, {})
     else:
         job_id = None
 
     # 1. Create new file annotation job
     if job_id == None:
-        print "Creating file annotation job for file: " + input_vcf_name
+        print("Creating file annotation job for file: " + input_vcf_name)
         response = api_request('file_annotations/counts', {'assembly': ASSEMBLY, 'filename': input_vcf_name}, 'POST')
 
     job_id = response['job_id']
     job_url = response['job_url']
     upload_url = response['upload_url']
     state = response['state']
-    print "Job ID: " + job_id
+    print("Job ID: " + job_id)
 
     if state == "created":
         # 2. Upload VCF or annotated VCF file for annotation
-        print "Uploading file..."
+        print("Uploading file...")
         with open(input_vcf_path, 'rb') as f:
             requests.put(upload_url, data=f, headers={'Content-Type': 'application/octet-stream'})
 
@@ -109,16 +109,16 @@ def main(args):
         response, state = wait_for_success("file_annotations/counts/" + job_id)
 
     if state == "succeeded":
-        print "Successfully annotated. " + str(response['annotated']) + " out of " + str(response['records']) + " have annotations."
+        print("Successfully annotated. " + str(response['annotated']) + " out of " + str(response['records']) + " have annotations.")
     else:
-        print "There was an error processing the file for Job ID " + job_id
+        print("There was an error processing the file for Job ID " + job_id)
         sys.exit(1)
 
     download_url = response['download_url']
 
     # 4. Download annotated file
     output_file_path = re.sub(r"\.vcf(\.gz)?$", ".annotated-" + job_id + ".vcf.gz", input_vcf_path)
-    print "Downloading annotated file to " + output_file_path
+    print("Downloading annotated file to " + output_file_path)
     downloaded_file = api_request("file_annotations/counts/" + job_id + "/download", {}, json_request=False)
     with open(output_file_path, 'wb') as output_file:
         output_file.write(downloaded_file.content)

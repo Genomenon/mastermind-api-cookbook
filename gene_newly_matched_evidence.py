@@ -439,7 +439,7 @@ def main(args):
             if len(gene_data) > 0:
                 canonical_gene = gene_data[0]['canonical']
             else:
-                print "No suggestions found for " + gene_input
+                print("No suggestions found for " + gene_input)
                 continue
 
             begin_count = api_get("counts", filtered_params(canonical_gene, BEGIN))
@@ -456,7 +456,7 @@ def main(args):
 
                 if ONLY_VARIANTS:
                     variants = api_get("variants", filtered_params(canonical_gene, BEGIN))
-                    print "Found " + str(variants["variant_count"]) + " variants"
+                    print("Found " + str(variants["variant_count"]) + " variants")
 
                 if (not ONLY_VARIANTS) or variants["variant_count"] > 0:
                     begin_pmids = get_articles(filtered_params(canonical_gene, BEGIN))
