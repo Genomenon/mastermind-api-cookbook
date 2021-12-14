@@ -12,7 +12,7 @@ Mastermind API key and save the updated file.
 This takes an input of variants from a given case, as well as an input of
 phenotypes for the same case. It then queries the genomic literature evidence
 for all variants, and prioritizes variants that have been found to be
-associated with each other and most with the phenotype inputs.
+associated with each other the most with the phenotype inputs.
 
 In addition to this prioritization, this will output the complete list of
 articles matched to the variants, along with all of the other genes, variants,
@@ -40,14 +40,14 @@ Then run the file directly from the command line, passing the file path to the
 variants file and phenotypes file, respectively:
     ./variant_phenotype_evidence.py my_variant_list.txt my_phenotype_list.txt
 
-For my_gene_list.txt as an input, this will generate 3 output CSV files:
-    my_gene_list.articles.csv
-    my_gene_list.phenotypes.csv
-    my_gene_list.variants.csv
+For my_variant_list.txt as an input, this will generate 3 output CSV files:
+    my_variant_list.articles.csv
+    my_variant_list.phenotypes.csv
+    my_variant_list.variants.csv
 
 And one output Associations summary file:
-    my_gene_list.associations-summary.txt
-    my_gene_list.associations.txt
+    my_variant_list.associations-summary.txt
+    my_variant_list.associations.txt
 
 The top of the Associations summary file will contain any of the input variants
 that were co-cited in articles, along with the PMIDs, input phenotypes, and any
@@ -335,7 +335,7 @@ def pipe_delimited_field(values):
     return "\"" + re.sub(r"\"", "\"\"", "|".join(values)) + "\""
 
 def main(args):
-    print("Welcome to the Gene New Evidence Alerts program powered by Mastermind.")
+    print("Welcome to the Variant Phenotype Evidence program powered by Mastermind.")
 
     if ONLY_NUCLEOTIDE_CITATIONS and not SKIP_VARIANT_SUGGESTION_NORMALIZATION:
         print("")
