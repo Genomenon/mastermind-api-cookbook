@@ -164,8 +164,9 @@ def encode(str):
 
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
     str_format = "{0:." + str(decimals) + "f}"
-    percents = str_format.format(100 * (iteration / float(total)))
-    filled_length = int(round(bar_length * iteration / float(total)))
+    fraction = 1 if total == 0 else iteration / float(total)
+    percents = str_format.format(100 * fraction)
+    filled_length = int(round(bar_length * fraction))
     bar = 'M' * filled_length + '-' * (bar_length - filled_length)
 
     sys.stdout.write('\r%s |%s| %s%s %s' % (prefix, bar, percents, '%', suffix)),
@@ -386,10 +387,10 @@ def main(args):
                         if len(variant_data) > 0:
                             canonical_variant = variant_data[0]['canonical']
                         else:
-                            print variant_input + " could not be matched to a valid transcript."
+                            print(variant_input + " could not be matched to a valid transcript.")
                             continue
                     else:
-                        print gene_input[0] + " could not be matched to a valid transcript."
+                        print(gene_input[0] + " could not be matched to a valid transcript.")
                         continue
 
             if canonical_variant in variant_info:
@@ -404,7 +405,7 @@ def main(args):
                     print("No articles found for " + canonical_variant + " (" + variant_input + ").")
 
     if variants_with_articles == 0:
-        print("Mastermind searched 30 million abstracts and 7 million genomic full-text articles, and no articles cite these variants."
+        print("Mastermind searched 30 million abstracts and 7 million genomic full-text articles, and no articles cite these variants.")
         return
 
     # Aggregate all article info, from which other aggregations will be generated
@@ -479,7 +480,7 @@ def main(args):
 
         if len(comentioned_phenotypes) > 0:
             output_file.write("Found co-cited phenotypes in the literature:\n")
-            for phenotypes, data in sorted(comentioned_phenotypes.items(), key=lambda item: 1/len(item[1]['variants'])):
+            for phenotypes, data in sorted(comentioned_phenotypes.items(), key=lambda item: 1/(len(item[1]['variants']) if len(item[1]['variants']) > 0 else 1)):
                 output_file.write("\t" + phenotypes + ":\n")
                 output_file.write("\t\tPMIDS:\n")
                 output_file.write("\t\t\t" + ", ".join(data["pmids"]) + "\n")
