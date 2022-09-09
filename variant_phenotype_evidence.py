@@ -123,7 +123,14 @@ SKIP_VARIANT_SUGGESTION_NORMALIZATION = True
 # Useful for large variant datasets when higher specificity is desired
 # If setting to True, ensure SKIP_VARIANT_SUGGESTION_NORMALIZATION is set to True,
 # since that step will convert nucleotide-specific variant names to their protein effects.
-ONLY_NUCLEOTIDE_CITATIONS = True
+ONLY_NUCLEOTIDE_CITATIONS = False
+
+# This is similar to the setting above, except that it allows for
+# non-nucleotide-exact matching for coding variants and a limited set of
+# targeted non-coding events, i.e. splice site and splice region variants (but
+# not deep intronic or UTR variants, which still require nucleotide-exact
+# matching).
+ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING = True
 
 def api_get(endpoint, options, tries=0):
     params = options.copy()
@@ -178,15 +185,29 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
 def variant_dna_format(variant):
     return re.search(r'c\.\d+', variant) or re.search(r'g\.\d+', variant) or re.search(r'rs\d+', variant) or re.search(r'IVS\d', variant)
 
-def specificity_match(variant_dna_specificity, article):
-    return (not ONLY_NUCLEOTIDE_CITATIONS or not variant_dna_specificity) or ('matched_dna' in article and article['matched_dna'] == True)
+def coding_or_splice(variant):
+    return not re.search(r'(int|UTR)$', variant)
 
-def get_articles(options):
+def specificity_match(variant_dna_specificity, variant_coding_or_splice, article):
+    if not variant_dna_specificity:
+        return True
+
+    if not ONLY_NUCLEOTIDE_CITATIONS and not ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING:
+        return True
+
+    if ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING and variant_coding_or_splice:
+        return True
+
+    # IF we've made it this far, then it must be a dna-specific match
+    return 'matched_dna' in article and article['matched_dna'] == True
+
+def get_articles(options, variant_bucket):
     data = api_get("articles", options)
     variant_dna_specificity = 'variant' in options and variant_dna_format(options['variant'])
+    variant_coding_or_splice = 'variant' in options and coding_or_splice(variant_bucket)
 
     if data and "articles" in data:
-        pmids = [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, article)]
+        pmids = [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, variant_coding_or_splice, article)]
 
         articles = int(data['article_count'])
         pages = int(data['pages'])
@@ -194,14 +215,14 @@ def get_articles(options):
         print_progress(1, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
         if pages > 1:
-            if specificity_match(variant_dna_specificity, data['articles'][-1]):
+            if specificity_match(variant_dna_specificity, variant_coding_or_splice, data['articles'][-1]):
                 for page in range(2, pages+1):
                     print_progress(page, pages, prefix = 'Getting ' + str(articles) + ' articles for ' + str(options['variant']) + ':', suffix = 'Complete', bar_length = 50)
 
                     options.update({'page': page})
                     data = api_get("articles", options)
-                    pmids = pmids + [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, article)]
-                    if not specificity_match(variant_dna_specificity, data['articles'][-1]):
+                    pmids = pmids + [article['pmid'] for article in data['articles'] if specificity_match(variant_dna_specificity, variant_coding_or_splice, article)]
+                    if not specificity_match(variant_dna_specificity, variant_coding_or_splice, data['articles'][-1]):
                         sys.stdout.write('\n')
                         sys.stdout.flush()
                         break;
@@ -338,9 +359,15 @@ def pipe_delimited_field(values):
 def main(args):
     print("Welcome to the Variant Phenotype Evidence program powered by Mastermind.")
 
-    if ONLY_NUCLEOTIDE_CITATIONS and not SKIP_VARIANT_SUGGESTION_NORMALIZATION:
+    if (ONLY_NUCLEOTIDE_CITATIONS or ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING) and not SKIP_VARIANT_SUGGESTION_NORMALIZATION:
         print("")
-        print("Misconfiguration: ONLY_NUCLEOTIDE_CITATIONS is set to True, so SKIP_VARIANT_SUGGESTION_NORMALIZATION must also be set to True.")
+        print("Misconfiguration: ONLY_NUCLEOTIDE_CITATIONS or ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING is set to True, so SKIP_VARIANT_SUGGESTION_NORMALIZATION must also be set to True.")
+        print("Exiting.")
+        sys.exit(0)
+
+    if ONLY_NUCLEOTIDE_CITATIONS and ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING:
+        print("")
+        print("Misconfiguration: Only one of ONLY_NUCLEOTIDE_CITATIONS or ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING may be set to True.")
         print("Exiting.")
         sys.exit(0)
 
@@ -371,8 +398,16 @@ def main(args):
             if STOP_AFTER and variants_with_articles > STOP_AFTER:
                 break
             variant_input = line.strip()
+            variant_bucket = None
             if SKIP_VARIANT_SUGGESTION_NORMALIZATION:
                 canonical_variant = variant_input
+
+                if ONLY_NUCLEOTIDE_CITATIONS_FOR_NON_CODING:
+                    variant_data = api_get("suggestions", {'variant': variant_input})
+                    if len(variant_data) > 0:
+                        variant_bucket = variant_data[0]['canonical']
+                    else:
+                        print("Could not get variant data for", variant_input)
             else:
                 variant_data = api_get("suggestions", {'variant': variant_input})
                 if len(variant_data) > 0:
@@ -396,7 +431,7 @@ def main(args):
             if canonical_variant in variant_info:
                 print("Articles already fetched for " + canonical_variant)
             else:
-                count, articles = get_articles({'variant': canonical_variant})
+                count, articles = get_articles({'variant': canonical_variant}, variant_bucket)
                 variant_info[canonical_variant] = {'pmids': articles}
 
                 if count > 0:
